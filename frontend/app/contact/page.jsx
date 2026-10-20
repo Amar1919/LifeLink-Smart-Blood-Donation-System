@@ -66,7 +66,7 @@ export default function ContactPage() {
       <section className="bg-linear-to-br from-red-50 via-white to-rose-100">
         <div className="mx-auto max-w-6xl px-5 py-14 text-center sm:py-20">
           <span className="rounded-full bg-red-100 px-4 py-2 text-sm font-semibold text-red-700">
-            We're Here to Help
+    <p>We&apos;re here to help.</p>
           </span>
 
           <h1 className="mt-6 text-4xl font-extrabold sm:text-5xl">
@@ -87,7 +87,7 @@ export default function ContactPage() {
           <h2 className="text-2xl font-bold">Get in Touch</h2>
 
           <p className="mt-4 leading-7 text-red-100">
-            We're building a platform to make blood donor discovery and request
+            We&apos;re building a platform to make blood donor discovery and request
             management easier. Use this form to share your questions or
             feedback.
           </p>

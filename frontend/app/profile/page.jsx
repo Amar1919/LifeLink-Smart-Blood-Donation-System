@@ -121,7 +121,7 @@ export default function ProfilePage() {
                 {initials}
               </div>
 
-              <h2 className="mt-4 break-words text-xl font-bold">
+              <h2 className="mt-4 wrap-break-word text-xl font-bold">
                 {profile.name}
               </h2>
 
@@ -152,7 +152,7 @@ export default function ProfilePage() {
               <div className="flex items-center justify-between gap-3">
                 <span className="text-gray-500">Location</span>
 
-                <span className="max-w-36 break-words text-right font-medium">
+                <span className="max-w-36 wrap-break-words text-right font-medium">
                   {profile.city || "Not added"}
                 </span>
               </div>
