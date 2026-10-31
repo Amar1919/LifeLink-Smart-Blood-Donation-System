@@ -1,4 +1,3 @@
-
 import Link from "next/link";
 
 const features = [
@@ -6,19 +5,19 @@ const features = [
     icon: "🩸",
     title: "Donor Registration",
     description:
-      "Allow eligible donors to register their details, blood group, location, and availability.",
+      "Allow eligible donors to register their details, blood group, location, and current availability.",
   },
   {
     icon: "🔎",
     title: "Smart Donor Matching",
     description:
-      "Help identify potential donors based on blood group, location, and availability.",
+      "Identify potential donors using blood group, location, and availability information.",
   },
   {
     icon: "🚨",
     title: "Urgent Blood Requests",
     description:
-      "Make it easier to submit blood requests and communicate the urgency of a patient's need.",
+      "Submit blood requests with the required blood group, number of units, hospital, and urgency.",
   },
   {
     icon: "📊",
@@ -33,25 +32,43 @@ const steps = [
     number: "01",
     title: "Register",
     description:
-      "Donors provide their contact details, blood group, and availability.",
+      "Donors create a profile by providing their contact details, blood group, location, and availability.",
   },
   {
     number: "02",
     title: "Submit a Request",
     description:
-      "A requester provides the required blood group, hospital, location, and urgency.",
+      "A requester provides the required blood group, number of units, hospital, location, and urgency.",
   },
   {
     number: "03",
     title: "Find Potential Donors",
     description:
-      "The system helps identify potential matches using the available donor information.",
+      "The system identifies potential matches using the available donor information.",
   },
   {
     number: "04",
     title: "Coordinate Donation",
     description:
       "The requester can coordinate with potential donors and the relevant healthcare facility.",
+  },
+];
+
+const values = [
+  {
+    title: "Accessibility",
+    description:
+      "Bring donor discovery and blood request features together in one platform.",
+  },
+  {
+    title: "Organization",
+    description:
+      "Help users manage blood requests and monitor their progress.",
+  },
+  {
+    title: "Responsible Donation",
+    description:
+      "Encourage safe donation practices and appropriate medical guidance.",
   },
 ];
 
@@ -69,18 +86,21 @@ export default function AboutPage() {
             <Link href="/" className="text-gray-600 hover:text-red-600">
               Home
             </Link>
+
             <Link
               href="/donors"
               className="text-gray-600 hover:text-red-600"
             >
               Become a Donor
             </Link>
+
             <Link
               href="/requests"
               className="text-gray-600 hover:text-red-600"
             >
               Blood Requests
             </Link>
+
             <Link
               href="/matching"
               className="text-gray-600 hover:text-red-600"
@@ -101,7 +121,9 @@ export default function AboutPage() {
 
             <h1 className="mt-6 text-4xl font-extrabold leading-tight sm:text-5xl">
               Connecting Lives,
-              <span className="block text-red-600">One Donation at a Time.</span>
+              <span className="block text-red-600">
+                One Donation at a Time.
+              </span>
             </h1>
 
             <p className="mt-6 max-w-xl text-base leading-8 text-gray-600">
@@ -131,11 +153,16 @@ export default function AboutPage() {
           <div className="flex justify-center">
             <div className="relative flex h-72 w-72 items-center justify-center rounded-full bg-red-100 sm:h-96 sm:w-96">
               <div className="absolute inset-5 rounded-full border-2 border-dashed border-red-200" />
+
               <div className="text-center">
-                <div className="text-8xl">🩸</div>
+                <div className="text-8xl" aria-hidden="true">
+                  🩸
+                </div>
+
                 <p className="mt-4 text-xl font-extrabold text-red-700">
                   Every Drop Counts
                 </p>
+
                 <p className="mt-2 text-sm text-red-500">
                   Together, we can make a difference.
                 </p>
@@ -159,7 +186,7 @@ export default function AboutPage() {
           <p className="mt-5 leading-8 text-gray-600">
             Finding a potential blood donor can be difficult when time matters.
             LifeLink brings donor information, blood requests, and matching
-            features together in one platform, helping users organize the
+            features together in one platform, helping users organize their
             search and coordinate with potential donors.
           </p>
         </div>
@@ -170,11 +197,16 @@ export default function AboutPage() {
               key={feature.title}
               className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
             >
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-red-50 text-3xl">
+              <div
+                className="flex h-14 w-14 items-center justify-center rounded-2xl bg-red-50 text-3xl"
+                aria-hidden="true"
+              >
                 {feature.icon}
               </div>
 
-              <h3 className="mt-5 text-lg font-bold">{feature.title}</h3>
+              <h3 className="mt-5 text-lg font-bold">
+                {feature.title}
+              </h3>
 
               <p className="mt-3 text-sm leading-7 text-gray-600">
                 {feature.description}
@@ -198,7 +230,7 @@ export default function AboutPage() {
 
             <p className="mt-4 leading-7 text-gray-600">
               LifeLink organizes the process of finding potential blood donors
-              and managing requests.
+              and managing blood requests.
             </p>
           </div>
 
@@ -206,13 +238,15 @@ export default function AboutPage() {
             {steps.map((step) => (
               <article
                 key={step.number}
-                className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm"
+                className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-md"
               >
                 <span className="text-4xl font-extrabold text-red-200">
                   {step.number}
                 </span>
 
-                <h3 className="mt-4 text-lg font-bold">{step.title}</h3>
+                <h3 className="mt-4 text-lg font-bold">
+                  {step.title}
+                </h3>
 
                 <p className="mt-3 text-sm leading-7 text-gray-600">
                   {step.description}
@@ -245,33 +279,21 @@ export default function AboutPage() {
           </div>
 
           <div className="space-y-4">
-            {[
-              {
-                title: "Accessibility",
-                description:
-                  "Bring donor discovery and blood request features together.",
-              },
-              {
-                title: "Organization",
-                description:
-                  "Help users manage requests and view their status.",
-              },
-              {
-                title: "Responsible Donation",
-                description:
-                  "Encourage safe donation practices and appropriate medical guidance.",
-              },
-            ].map((item) => (
+            {values.map((item) => (
               <div
                 key={item.title}
-                className="flex gap-4 rounded-2xl border border-gray-100 p-5"
+                className="flex gap-4 rounded-2xl border border-gray-100 p-5 transition hover:shadow-sm"
               >
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-green-100 text-lg text-green-700">
+                <span
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-green-100 text-lg text-green-700"
+                  aria-hidden="true"
+                >
                   ✓
                 </span>
 
                 <div>
                   <h3 className="font-bold">{item.title}</h3>
+
                   <p className="mt-2 text-sm leading-6 text-gray-600">
                     {item.description}
                   </p>
@@ -322,12 +344,15 @@ export default function AboutPage() {
           <Link href="/" className="hover:text-red-600">
             Home
           </Link>
+
           <Link href="/about" className="hover:text-red-600">
             About
           </Link>
+
           <Link href="/my-requests" className="hover:text-red-600">
             My Requests
           </Link>
+
           <Link href="/profile" className="hover:text-red-600">
             My Profile
           </Link>

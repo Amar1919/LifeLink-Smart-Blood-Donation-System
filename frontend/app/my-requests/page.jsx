@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from "react";
@@ -52,59 +51,116 @@ const urgencyStyles = {
   Normal: "bg-green-100 text-green-700",
 };
 
+function formatDate(dateString) {
+  if (!dateString) return "Not specified";
+
+  const date = new Date(`${dateString}T00:00:00`);
+
+  if (Number.isNaN(date.getTime())) return dateString;
+
+  return date.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 export default function MyRequestsPage() {
   const [requests, setRequests] = useState(initialRequests);
   const [filter, setFilter] = useState("All");
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState("");
+  const [messageType, setMessageType] = useState("success");
 
   const filteredRequests = requests.filter((request) => {
     const matchesFilter =
       filter === "All" || request.status === filter;
 
-    const searchText = search.toLowerCase();
+    const searchText = search.trim().toLowerCase();
 
     const matchesSearch =
       request.id.toLowerCase().includes(searchText) ||
       request.patient.toLowerCase().includes(searchText) ||
       request.bloodGroup.toLowerCase().includes(searchText) ||
-      request.city.toLowerCase().includes(searchText);
+      request.city.toLowerCase().includes(searchText) ||
+      request.hospital.toLowerCase().includes(searchText) ||
+      request.urgency.toLowerCase().includes(searchText);
 
     return matchesFilter && matchesSearch;
   });
 
   function cancelRequest(id) {
+    const request = requests.find((item) => item.id === id);
+
+    if (!request) {
+      setMessageType("error");
+      setMessage("Request could not be found.");
+      return;
+    }
+
+    if (request.status !== "Searching") {
+      setMessageType("error");
+      setMessage("Only requests with Searching status can be cancelled.");
+      return;
+    }
+
     const confirmed = window.confirm(
-      "Are you sure you want to cancel this blood request?"
+      `Are you sure you want to cancel request ${id}?`
     );
 
     if (!confirmed) return;
 
     setRequests((previous) =>
-      previous.map((request) =>
-        request.id === id
-          ? { ...request, status: "Cancelled" }
-          : request
+      previous.map((item) =>
+        item.id === id
+          ? { ...item, status: "Cancelled" }
+          : item
       )
     );
 
-    setMessage(`Request ${id} has been cancelled.`);
+    setMessageType("success");
+    setMessage(`Request ${id} has been cancelled successfully.`);
   }
 
   const totalRequests = requests.length;
+
   const searchingCount = requests.filter(
     (request) => request.status === "Searching"
   ).length;
+
   const fulfilledCount = requests.filter(
     (request) => request.status === "Fulfilled"
   ).length;
+
   const cancelledCount = requests.filter(
     (request) => request.status === "Cancelled"
   ).length;
 
+  const statistics = [
+    {
+      label: "Total Requests",
+      value: totalRequests,
+      color: "text-gray-800",
+    },
+    {
+      label: "Searching",
+      value: searchingCount,
+      color: "text-blue-600",
+    },
+    {
+      label: "Fulfilled",
+      value: fulfilledCount,
+      color: "text-green-600",
+    },
+    {
+      label: "Cancelled",
+      value: cancelledCount,
+      color: "text-gray-500",
+    },
+  ];
+
   return (
     <main className="min-h-screen bg-gray-50 text-gray-800">
-      {/* Navigation */}
       <nav className="border-b border-gray-100 bg-white">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-5 py-4">
           <Link href="/" className="text-2xl font-extrabold text-red-600">
@@ -115,18 +171,21 @@ export default function MyRequestsPage() {
             <Link href="/" className="text-gray-600 hover:text-red-600">
               Home
             </Link>
+
             <Link
               href="/dashboard"
               className="text-gray-600 hover:text-red-600"
             >
               Dashboard
             </Link>
+
             <Link
               href="/profile"
               className="text-gray-600 hover:text-red-600"
             >
               My Profile
             </Link>
+
             <Link
               href="/requests"
               className="text-gray-600 hover:text-red-600"
@@ -138,15 +197,16 @@ export default function MyRequestsPage() {
       </nav>
 
       <section className="mx-auto max-w-6xl px-5 py-10">
-        {/* Heading */}
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="text-sm font-semibold uppercase tracking-widest text-red-600">
               Request Management
             </p>
+
             <h1 className="mt-2 text-3xl font-extrabold sm:text-4xl">
               My Blood Requests
             </h1>
+
             <p className="mt-2 text-gray-500">
               View and manage your blood requests in one place.
             </p>
@@ -160,35 +220,14 @@ export default function MyRequestsPage() {
           </Link>
         </div>
 
-        {/* Statistics */}
         <div className="mt-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
-          {[
-            {
-              label: "Total Requests",
-              value: totalRequests,
-              color: "text-gray-800",
-            },
-            {
-              label: "Searching",
-              value: searchingCount,
-              color: "text-blue-600",
-            },
-            {
-              label: "Fulfilled",
-              value: fulfilledCount,
-              color: "text-green-600",
-            },
-            {
-              label: "Cancelled",
-              value: cancelledCount,
-              color: "text-gray-500",
-            },
-          ].map((stat) => (
+          {statistics.map((stat) => (
             <div
               key={stat.label}
               className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm"
             >
               <p className="text-sm text-gray-500">{stat.label}</p>
+
               <p className={`mt-2 text-3xl font-extrabold ${stat.color}`}>
                 {stat.value}
               </p>
@@ -196,13 +235,13 @@ export default function MyRequestsPage() {
           ))}
         </div>
 
-        {/* Search and filters */}
         <section className="mt-8 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <h2 className="font-bold">All Requests</h2>
+
               <p className="mt-1 text-sm text-gray-500">
-                Search by patient, request ID, blood group, or city.
+                Search by patient, request ID, hospital, blood group, or city.
               </p>
             </div>
 
@@ -212,6 +251,7 @@ export default function MyRequestsPage() {
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search requests..."
               className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100 md:max-w-xs"
+              aria-label="Search blood requests"
             />
           </div>
 
@@ -220,7 +260,11 @@ export default function MyRequestsPage() {
               <button
                 key={status}
                 type="button"
-                onClick={() => setFilter(status)}
+                onClick={() => {
+                  setFilter(status);
+                  setMessage("");
+                }}
+                aria-pressed={filter === status}
                 className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
                   filter === status
                     ? "bg-red-600 text-white"
@@ -228,18 +272,24 @@ export default function MyRequestsPage() {
                 }`}
               >
                 {status}
+                {status === "All" ? ` (${totalRequests})` : ""}
               </button>
             ))}
           </div>
         </section>
 
-        {/* Feedback */}
         {message && (
           <div
             role="status"
-            className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-green-50 px-4 py-3 text-sm text-green-700"
+            aria-live="polite"
+            className={`mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl px-4 py-3 text-sm ${
+              messageType === "success"
+                ? "bg-green-50 text-green-700"
+                : "bg-red-50 text-red-700"
+            }`}
           >
             <span>{message}</span>
+
             <button
               type="button"
               onClick={() => setMessage("")}
@@ -250,7 +300,6 @@ export default function MyRequestsPage() {
           </div>
         )}
 
-        {/* Request cards */}
         <section className="mt-6 space-y-5">
           {filteredRequests.length > 0 ? (
             filteredRequests.map((request) => (
@@ -268,9 +317,11 @@ export default function MyRequestsPage() {
                       <h3 className="text-lg font-bold">
                         {request.patient}
                       </h3>
+
                       <p className="mt-1 text-sm text-gray-500">
                         Request ID: {request.id}
                       </p>
+
                       <p className="mt-1 text-sm text-gray-600">
                         {request.hospital}
                       </p>
@@ -279,17 +330,13 @@ export default function MyRequestsPage() {
 
                   <div className="flex flex-wrap gap-2">
                     <span
-                      className={`rounded-full px-3 py-1.5 text-xs font-bold ${
-                        urgencyStyles[request.urgency]
-                      }`}
+                      className={`rounded-full px-3 py-1.5 text-xs font-bold ${urgencyStyles[request.urgency]}`}
                     >
                       {request.urgency}
                     </span>
 
                     <span
-                      className={`rounded-full px-3 py-1.5 text-xs font-bold ${
-                        statusStyles[request.status]
-                      }`}
+                      className={`rounded-full px-3 py-1.5 text-xs font-bold ${statusStyles[request.status]}`}
                     >
                       {request.status}
                     </span>
@@ -311,7 +358,9 @@ export default function MyRequestsPage() {
 
                   <div>
                     <p className="text-xs text-gray-500">Required By</p>
-                    <p className="mt-1 font-semibold">{request.date}</p>
+                    <p className="mt-1 font-semibold">
+                      {formatDate(request.date)}
+                    </p>
                   </div>
 
                   <div>
@@ -338,31 +387,58 @@ export default function MyRequestsPage() {
                     </button>
                   </div>
                 )}
+
+                {request.status === "Fulfilled" && (
+                  <p className="mt-5 rounded-xl bg-green-50 px-4 py-3 text-sm font-medium text-green-700">
+                    This request has been fulfilled.
+                  </p>
+                )}
+
+                {request.status === "Cancelled" && (
+                  <p className="mt-5 rounded-xl bg-gray-50 px-4 py-3 text-sm font-medium text-gray-600">
+                    This request has been cancelled.
+                  </p>
+                )}
               </article>
             ))
           ) : (
             <div className="rounded-2xl border border-dashed border-gray-300 bg-white px-5 py-12 text-center">
               <h3 className="text-lg font-bold">No requests found</h3>
+
               <p className="mt-2 text-sm text-gray-500">
                 Try another search term or filter, or create a new request.
               </p>
-              <Link
-                href="/requests"
-                className="mt-5 inline-block rounded-xl bg-red-600 px-5 py-3 text-sm font-semibold text-white hover:bg-red-700"
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch("");
+                  setFilter("All");
+                }}
+                className="mt-5 rounded-xl border border-gray-200 px-5 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
               >
-                Create Blood Request
-              </Link>
+                Clear Search and Filters
+              </button>
+
+              <div>
+                <Link
+                  href="/requests"
+                  className="mt-4 inline-block rounded-xl bg-red-600 px-5 py-3 text-sm font-semibold text-white hover:bg-red-700"
+                >
+                  Create Blood Request
+                </Link>
+              </div>
             </div>
           )}
         </section>
 
         <p className="mt-8 text-center text-xs leading-5 text-gray-400">
           Demonstration data only. Request changes are temporary and reset
-          when this page is refreshed.
+          when this page is refreshed. This page is not connected to the
+          backend or database yet.
         </p>
       </section>
 
-      {/* Footer */}
       <footer className="mt-8 border-t border-gray-200 bg-white px-5 py-6 text-center text-sm text-gray-500">
         © {new Date().getFullYear()} LifeLink. Every drop counts.
       </footer>

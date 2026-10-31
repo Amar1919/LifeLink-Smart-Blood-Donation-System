@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from "react";
@@ -16,8 +15,19 @@ const initialProfile = {
   role: "Blood Donor",
 };
 
+const bloodGroups = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
+
 const inputClass =
   "mt-2 w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-800 outline-none transition focus:border-red-400 focus:ring-2 focus:ring-red-100 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-500";
+
+function getTodayDate() {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
 
 export default function ProfilePage() {
   const [profile, setProfile] = useState(initialProfile);
@@ -35,17 +45,70 @@ export default function ProfilePage() {
     }));
   }
 
+  function showError(errorMessage) {
+    setMessageType("error");
+    setMessage(errorMessage);
+  }
+
   function handleSave(event) {
     event.preventDefault();
 
-    if (!form.name.trim() || !form.email.trim()) {
-      setMessageType("error");
-      setMessage("Please enter your name and email.");
+    const name = form.name.trim();
+    const email = form.email.trim();
+    const phone = form.phone.replace(/\D/g, "");
+    const city = form.city.trim();
+
+    if (name.length < 2) {
+      showError("Please enter a valid full name.");
       return;
     }
 
-    setProfile({ ...form });
-    setForm({ ...form });
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!emailPattern.test(email)) {
+      showError("Please enter a valid email address.");
+      return;
+    }
+
+    if (form.phone.trim() && !/^\d{10}$/.test(phone)) {
+      showError("Phone number must contain exactly 10 digits.");
+      return;
+    }
+
+    if (form.age !== "") {
+      const age = Number(form.age);
+
+      if (!Number.isInteger(age) || age < 18 || age > 100) {
+        showError("Age must be a whole number between 18 and 100.");
+        return;
+      }
+    }
+
+    if (city && city.length < 2) {
+      showError("Please enter a valid city name.");
+      return;
+    }
+
+    if (!bloodGroups.includes(form.bloodGroup)) {
+      showError("Please select a valid blood group.");
+      return;
+    }
+
+    if (form.lastDonation && form.lastDonation > getTodayDate()) {
+      showError("Last donation date cannot be in the future.");
+      return;
+    }
+
+    const updatedProfile = {
+      ...form,
+      name,
+      email,
+      phone,
+      city,
+    };
+
+    setProfile(updatedProfile);
+    setForm(updatedProfile);
     setEditing(false);
     setMessageType("success");
     setMessage("Profile updated successfully!");
@@ -54,6 +117,12 @@ export default function ProfilePage() {
   function handleCancel() {
     setForm({ ...profile });
     setEditing(false);
+    setMessage("");
+  }
+
+  function handleEdit() {
+    setForm({ ...profile });
+    setEditing(true);
     setMessage("");
   }
 
@@ -97,7 +166,7 @@ export default function ProfilePage() {
         </div>
       </nav>
 
-      {/* Page heading */}
+      {/* Profile Content */}
       <section className="mx-auto max-w-6xl px-5 py-10">
         <div className="mb-8">
           <p className="text-sm font-semibold uppercase tracking-widest text-red-600">
@@ -114,7 +183,7 @@ export default function ProfilePage() {
         </div>
 
         <div className="grid gap-7 lg:grid-cols-[300px_1fr]">
-          {/* Profile summary */}
+          {/* Profile Summary */}
           <aside className="h-fit rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
             <div className="flex flex-col items-center text-center">
               <div className="flex h-24 w-24 items-center justify-center rounded-full bg-red-100 text-3xl font-bold text-red-600">
@@ -164,6 +233,14 @@ export default function ProfilePage() {
                   {profile.lastDonation || "Not added"}
                 </span>
               </div>
+
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-gray-500">Age</span>
+
+                <span className="font-medium">
+                  {profile.age || "Not added"}
+                </span>
+              </div>
             </div>
 
             <div className="mt-6 rounded-2xl bg-red-50 p-4">
@@ -172,13 +249,13 @@ export default function ProfilePage() {
               </p>
 
               <p className="mt-1 text-sm leading-6 text-red-600">
-                Keep your information updated so people can find eligible
+                Keep your information updated so people can find potential
                 donors.
               </p>
             </div>
           </aside>
 
-          {/* Profile form */}
+          {/* Personal Information */}
           <section className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm sm:p-8">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
@@ -192,11 +269,7 @@ export default function ProfilePage() {
               {!editing && (
                 <button
                   type="button"
-                  onClick={() => {
-                    setForm({ ...profile });
-                    setEditing(true);
-                    setMessage("");
-                  }}
+                  onClick={handleEdit}
                   className="rounded-xl bg-red-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-red-700"
                 >
                   Edit Profile
@@ -204,10 +277,10 @@ export default function ProfilePage() {
               )}
             </div>
 
-            {/* Status message */}
             {message && (
               <div
                 role="status"
+                aria-live="polite"
                 className={`mt-5 rounded-xl px-4 py-3 text-sm ${
                   messageType === "success"
                     ? "bg-green-50 text-green-700"
@@ -220,7 +293,6 @@ export default function ProfilePage() {
 
             <form onSubmit={handleSave} className="mt-7">
               <div className="grid gap-5 sm:grid-cols-2">
-                {/* Full name */}
                 <label className="text-sm font-semibold">
                   Full Name
                   <input
@@ -231,11 +303,12 @@ export default function ProfilePage() {
                     onChange={handleChange}
                     disabled={!editing}
                     required
+                    minLength={2}
+                    maxLength={80}
                     placeholder="Enter your full name"
                   />
                 </label>
 
-                {/* Email */}
                 <label className="text-sm font-semibold">
                   Email Address
                   <input
@@ -250,21 +323,21 @@ export default function ProfilePage() {
                   />
                 </label>
 
-                {/* Phone */}
                 <label className="text-sm font-semibold">
                   Phone Number
                   <input
                     className={inputClass}
                     name="phone"
                     type="tel"
+                    inputMode="numeric"
+                    maxLength={10}
                     value={form.phone}
                     onChange={handleChange}
                     disabled={!editing}
-                    placeholder="Enter your phone number"
+                    placeholder="Enter your 10-digit phone number"
                   />
                 </label>
 
-                {/* Blood group */}
                 <label className="text-sm font-semibold">
                   Blood Group
                   <select
@@ -274,17 +347,14 @@ export default function ProfilePage() {
                     onChange={handleChange}
                     disabled={!editing}
                   >
-                    {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map(
-                      (group) => (
-                        <option key={group} value={group}>
-                          {group}
-                        </option>
-                      )
-                    )}
+                    {bloodGroups.map((group) => (
+                      <option key={group} value={group}>
+                        {group}
+                      </option>
+                    ))}
                   </select>
                 </label>
 
-                {/* Age */}
                 <label className="text-sm font-semibold">
                   Age
                   <input
@@ -293,6 +363,7 @@ export default function ProfilePage() {
                     type="number"
                     min="18"
                     max="100"
+                    step="1"
                     value={form.age}
                     onChange={handleChange}
                     disabled={!editing}
@@ -300,13 +371,13 @@ export default function ProfilePage() {
                   />
                 </label>
 
-                {/* City */}
                 <label className="text-sm font-semibold">
                   City
                   <input
                     className={inputClass}
                     name="city"
                     type="text"
+                    maxLength={80}
                     value={form.city}
                     onChange={handleChange}
                     disabled={!editing}
@@ -314,7 +385,6 @@ export default function ProfilePage() {
                   />
                 </label>
 
-                {/* Last donation */}
                 <label className="text-sm font-semibold sm:col-span-2">
                   Last Blood Donation Date
                   <input
@@ -324,12 +394,11 @@ export default function ProfilePage() {
                     value={form.lastDonation}
                     onChange={handleChange}
                     disabled={!editing}
-                    max={new Date().toLocaleDateString("en-CA")}
+                    max={getTodayDate()}
                   />
                 </label>
               </div>
 
-              {/* Availability toggle */}
               <div className="mt-6 rounded-2xl border border-gray-100 bg-gray-50 p-5">
                 <label className="flex cursor-pointer items-start gap-3">
                   <input
@@ -354,7 +423,6 @@ export default function ProfilePage() {
                 </label>
               </div>
 
-              {/* FIXED: Complete editing conditional */}
               {editing && (
                 <div className="mt-7 flex flex-wrap gap-3">
                   <button
@@ -374,6 +442,12 @@ export default function ProfilePage() {
                 </div>
               )}
             </form>
+
+            <p className="mt-6 text-xs leading-5 text-gray-400">
+              Demo mode: profile changes are stored only in this page&apos;s
+              temporary state and will reset when the page is refreshed.
+              Donor availability and age do not establish medical eligibility.
+            </p>
           </section>
         </div>
       </section>

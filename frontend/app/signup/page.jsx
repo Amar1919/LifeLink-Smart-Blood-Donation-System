@@ -32,8 +32,35 @@ export default function SignupPage() {
 
   function handleSubmit(event) {
     event.preventDefault();
+
     setMessage("");
     setError("");
+
+    const fullName = form.fullName.trim();
+    const email = form.email.trim();
+    const phone = form.phone.trim();
+
+    if (fullName.length < 2) {
+      setError("Please enter a valid full name.");
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!emailRegex.test(email)) {
+      setError("Please enter a valid email address.");
+      return;
+    }
+
+    if (!/^\d{10}$/.test(phone)) {
+      setError("Phone number must contain exactly 10 digits.");
+      return;
+    }
+
+    if (form.password.length < 8) {
+      setError("Password must contain at least 8 characters.");
+      return;
+    }
 
     if (form.password !== form.confirmPassword) {
       setError("Passwords do not match. Please check them.");
@@ -57,6 +84,7 @@ export default function SignupPage() {
 
   return (
     <main className="flex min-h-screen bg-white">
+      {/* Left Section */}
       <section className="hidden w-5/12 flex-col justify-between bg-linear-to-br from-red-600 via-red-600 to-rose-500 p-12 text-white lg:flex">
         <Link href="/" className="text-3xl font-extrabold">
           ❤️ LifeLink
@@ -66,9 +94,11 @@ export default function SignupPage() {
           <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-3xl bg-white/15 text-5xl">
             🤝
           </div>
+
           <h1 className="text-5xl font-extrabold leading-tight">
-            Be someone's reason to smile.
+            Be someone&apos;s reason to smile.
           </h1>
+
           <p className="mt-6 text-lg leading-8 text-red-50">
             Join a community that brings blood donors and people in need closer
             together.
@@ -81,12 +111,14 @@ export default function SignupPage() {
               </span>
               <span>Register as a blood donor</span>
             </div>
+
             <div className="flex items-center gap-3">
               <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20">
                 ✓
               </span>
               <span>Find potential donor matches</span>
             </div>
+
             <div className="flex items-center gap-3">
               <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20">
                 ✓
@@ -101,6 +133,7 @@ export default function SignupPage() {
         </p>
       </section>
 
+      {/* Signup Form Section */}
       <section className="flex w-full items-center justify-center px-5 py-12 sm:px-10 lg:w-7/12">
         <div className="w-full max-w-xl">
           <Link
@@ -121,22 +154,27 @@ export default function SignupPage() {
             <p className="text-sm font-bold uppercase tracking-widest text-red-600">
               Join the community
             </p>
+
             <h2 className="mt-3 text-4xl font-extrabold tracking-tight text-gray-900">
               Create your account
             </h2>
+
             <p className="mt-3 leading-7 text-gray-500">
               Sign up to get started with LifeLink.
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="mt-8 space-y-5">
+            {/* Full Name */}
             <div>
               <label htmlFor="fullName" className={labelClass}>
                 Full Name
               </label>
+
               <input
                 id="fullName"
                 name="fullName"
+                type="text"
                 value={form.fullName}
                 onChange={handleChange}
                 placeholder="Enter your full name"
@@ -147,11 +185,13 @@ export default function SignupPage() {
               />
             </div>
 
+            {/* Email and Phone */}
             <div className="grid gap-5 sm:grid-cols-2">
               <div>
                 <label htmlFor="email" className={labelClass}>
                   Email Address
                 </label>
+
                 <input
                   id="email"
                   name="email"
@@ -169,6 +209,7 @@ export default function SignupPage() {
                 <label htmlFor="phone" className={labelClass}>
                   Phone Number
                 </label>
+
                 <input
                   id="phone"
                   name="phone"
@@ -177,6 +218,8 @@ export default function SignupPage() {
                   onChange={handleChange}
                   placeholder="10-digit number"
                   autoComplete="tel"
+                  inputMode="numeric"
+                  maxLength={10}
                   pattern="[0-9]{10}"
                   title="Enter a 10-digit phone number"
                   className={inputClass}
@@ -185,16 +228,19 @@ export default function SignupPage() {
               </div>
             </div>
 
+            {/* Role */}
             <div>
               <label htmlFor="role" className={labelClass}>
                 I want to join as
               </label>
+
               <select
                 id="role"
                 name="role"
                 value={form.role}
                 onChange={handleChange}
                 className={inputClass}
+                required
               >
                 <option value="Donor">Blood Donor</option>
                 <option value="Requester">Blood Requester</option>
@@ -202,11 +248,13 @@ export default function SignupPage() {
               </select>
             </div>
 
+            {/* Password Fields */}
             <div className="grid gap-5 sm:grid-cols-2">
               <div>
                 <label htmlFor="password" className={labelClass}>
                   Password
                 </label>
+
                 <div className="relative">
                   <input
                     id="password"
@@ -220,6 +268,7 @@ export default function SignupPage() {
                     className={`${inputClass} pr-16`}
                     required
                   />
+
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
@@ -234,6 +283,7 @@ export default function SignupPage() {
                 <label htmlFor="confirmPassword" className={labelClass}>
                   Confirm Password
                 </label>
+
                 <input
                   id="confirmPassword"
                   name="confirmPassword"
@@ -249,6 +299,7 @@ export default function SignupPage() {
               </div>
             </div>
 
+            {/* Terms and Conditions */}
             <div className="flex items-start gap-3">
               <input
                 id="agree"
@@ -259,15 +310,23 @@ export default function SignupPage() {
                 className="mt-1 h-4 w-4 accent-red-600"
                 required
               />
-              <label htmlFor="agree" className="text-sm leading-6 text-gray-600">
+
+              <label
+                htmlFor="agree"
+                className="text-sm leading-6 text-gray-600"
+              >
                 I agree to the{" "}
-                <Link href="/about" className="font-semibold text-red-600 hover:underline">
+                <Link
+                  href="/about"
+                  className="font-semibold text-red-600 hover:underline"
+                >
                   Terms of Use
                 </Link>{" "}
                 and Privacy Policy.
               </label>
             </div>
 
+            {/* Error Message */}
             {error && (
               <div
                 role="alert"
@@ -277,6 +336,7 @@ export default function SignupPage() {
               </div>
             )}
 
+            {/* Success Message */}
             {message && (
               <div
                 role="status"
@@ -286,6 +346,7 @@ export default function SignupPage() {
               </div>
             )}
 
+            {/* Submit Button */}
             <button
               type="submit"
               className="w-full rounded-xl bg-red-600 px-5 py-4 font-bold text-white shadow-sm transition hover:bg-red-700 focus:outline-none focus:ring-4 focus:ring-red-200"
@@ -305,7 +366,8 @@ export default function SignupPage() {
           </p>
 
           <p className="mt-6 text-center text-xs leading-5 text-gray-400">
-            Frontend demo only. No account or password is saved or sent to a server.
+            Frontend demo only. No account or password is saved or sent to a
+            server.
           </p>
         </div>
       </section>

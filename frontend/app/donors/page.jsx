@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from "next/link";
@@ -17,6 +16,17 @@ export default function DonorRegistration() {
   });
 
   const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  function getTodayDate() {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+  }
 
   function handleChange(event) {
     const { name, value, type, checked } = event.target;
@@ -25,14 +35,80 @@ export default function DonorRegistration() {
       ...previous,
       [name]: type === "checkbox" ? checked : value,
     }));
+
+    setMessage("");
+    setError("");
   }
 
   function handleSubmit(event) {
     event.preventDefault();
 
-    setMessage(
-      "Form validated successfully! Database integration will be added later."
-    );
+    setMessage("");
+    setError("");
+
+    const fullName = formData.fullName.trim();
+    const email = formData.email.trim();
+    const phone = formData.phone.trim();
+    const city = formData.city.trim();
+    const age = Number(formData.age);
+
+    if (fullName.length < 2) {
+      setError("Please enter a valid full name.");
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!emailRegex.test(email)) {
+      setError("Please enter a valid email address.");
+      return;
+    }
+
+    if (!/^\d{10}$/.test(phone)) {
+      setError("Please enter a valid 10-digit phone number.");
+      return;
+    }
+
+    const validBloodGroups = [
+      "A+",
+      "A-",
+      "B+",
+      "B-",
+      "AB+",
+      "AB-",
+      "O+",
+      "O-",
+    ];
+
+    if (!validBloodGroups.includes(formData.bloodGroup)) {
+      setError("Please select a valid blood group.");
+      return;
+    }
+
+    if (!Number.isInteger(age) || age < 18 || age > 100) {
+      setError("Age must be between 18 and 100.");
+      return;
+    }
+
+    if (city.length < 2) {
+      setError("Please enter a valid city.");
+      return;
+    }
+
+    if (formData.lastDonation && formData.lastDonation > getTodayDate()) {
+      setError("Last donation date cannot be in the future.");
+      return;
+    }
+
+    setLoading(true);
+
+    // Frontend demo only. Backend integration will be added later.
+    setTimeout(() => {
+      setLoading(false);
+      setMessage(
+        "Donor registration validated successfully! Database integration will be added later."
+      );
+    }, 700);
   }
 
   const inputClass =
@@ -40,12 +116,14 @@ export default function DonorRegistration() {
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
+      {/* Navigation */}
       <nav className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5">
           <Link href="/" className="flex items-center gap-2">
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-600 text-2xl text-white">
               ♥
             </span>
+
             <span className="text-2xl font-black">
               Life<span className="text-red-600">Link</span>
             </span>
@@ -60,6 +138,7 @@ export default function DonorRegistration() {
         </div>
       </nav>
 
+      {/* Hero Section */}
       <section className="bg-linear-to-br from-red-600 to-rose-800 px-6 py-12 text-white md:py-16">
         <div className="mx-auto max-w-7xl">
           <p className="text-sm font-bold uppercase tracking-[0.2em] text-red-100">
@@ -77,7 +156,9 @@ export default function DonorRegistration() {
         </div>
       </section>
 
+      {/* Main Content */}
       <section className="mx-auto grid max-w-7xl gap-8 px-6 py-12 lg:grid-cols-3">
+        {/* Information Sidebar */}
         <aside className="space-y-6">
           <div className="rounded-2xl border border-red-100 bg-white p-6 shadow-sm">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-red-50 text-2xl">
@@ -106,9 +187,11 @@ export default function DonorRegistration() {
           </div>
         </aside>
 
+        {/* Donor Registration Form */}
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8 lg:col-span-2">
           <div className="border-b border-slate-100 pb-5">
             <h2 className="text-2xl font-extrabold">Your donor details</h2>
+
             <p className="mt-2 text-sm text-slate-500">
               Fill in the information below.
             </p>
@@ -116,26 +199,33 @@ export default function DonorRegistration() {
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-6">
             <div className="grid gap-5 sm:grid-cols-2">
+              {/* Full Name */}
               <div>
                 <label htmlFor="fullName" className="text-sm font-bold">
                   Full name *
                 </label>
+
                 <input
                   id="fullName"
                   name="fullName"
+                  type="text"
                   value={formData.fullName}
                   onChange={handleChange}
                   className={inputClass}
                   placeholder="Enter your full name"
                   autoComplete="name"
+                  minLength={2}
+                  maxLength={100}
                   required
                 />
               </div>
 
+              {/* Email */}
               <div>
                 <label htmlFor="email" className="text-sm font-bold">
                   Email address *
                 </label>
+
                 <input
                   id="email"
                   name="email"
@@ -149,10 +239,12 @@ export default function DonorRegistration() {
                 />
               </div>
 
+              {/* Phone */}
               <div>
                 <label htmlFor="phone" className="text-sm font-bold">
                   Phone number *
                 </label>
+
                 <input
                   id="phone"
                   name="phone"
@@ -160,16 +252,22 @@ export default function DonorRegistration() {
                   value={formData.phone}
                   onChange={handleChange}
                   className={inputClass}
-                  placeholder="Enter your phone number"
+                  placeholder="Enter your 10-digit phone number"
                   autoComplete="tel"
+                  inputMode="numeric"
+                  maxLength={10}
+                  pattern="[0-9]{10}"
+                  title="Enter a 10-digit phone number"
                   required
                 />
               </div>
 
+              {/* Blood Group */}
               <div>
                 <label htmlFor="bloodGroup" className="text-sm font-bold">
                   Blood group *
                 </label>
+
                 <select
                   id="bloodGroup"
                   name="bloodGroup"
@@ -179,6 +277,7 @@ export default function DonorRegistration() {
                   required
                 >
                   <option value="">Select blood group</option>
+
                   {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map(
                     (group) => (
                       <option key={group} value={group}>
@@ -189,16 +288,19 @@ export default function DonorRegistration() {
                 </select>
               </div>
 
+              {/* Age */}
               <div>
                 <label htmlFor="age" className="text-sm font-bold">
                   Age *
                 </label>
+
                 <input
                   id="age"
                   name="age"
                   type="number"
                   min="18"
                   max="100"
+                  step="1"
                   value={formData.age}
                   onChange={handleChange}
                   className={inputClass}
@@ -207,37 +309,46 @@ export default function DonorRegistration() {
                 />
               </div>
 
+              {/* City */}
               <div>
                 <label htmlFor="city" className="text-sm font-bold">
                   City *
                 </label>
+
                 <input
                   id="city"
                   name="city"
+                  type="text"
                   value={formData.city}
                   onChange={handleChange}
                   className={inputClass}
                   placeholder="Enter your city"
                   autoComplete="address-level2"
+                  minLength={2}
+                  maxLength={100}
                   required
                 />
               </div>
 
+              {/* Last Donation */}
               <div className="sm:col-span-2">
                 <label htmlFor="lastDonation" className="text-sm font-bold">
                   Last blood donation date (optional)
                 </label>
+
                 <input
                   id="lastDonation"
                   name="lastDonation"
                   type="date"
                   value={formData.lastDonation}
                   onChange={handleChange}
+                  max={getTodayDate()}
                   className={inputClass}
                 />
               </div>
             </div>
 
+            {/* Availability */}
             <label className="flex cursor-pointer items-start gap-3 rounded-xl bg-red-50 p-4">
               <input
                 type="checkbox"
@@ -246,10 +357,12 @@ export default function DonorRegistration() {
                 onChange={handleChange}
                 className="mt-1 h-4 w-4 accent-red-600"
               />
+
               <span>
                 <span className="block text-sm font-bold text-slate-800">
                   Available to be contacted
                 </span>
+
                 <span className="mt-1 block text-sm leading-6 text-slate-600">
                   I agree to be contacted about potential blood donation
                   requests. Availability does not guarantee medical eligibility.
@@ -257,6 +370,17 @@ export default function DonorRegistration() {
               </span>
             </label>
 
+            {/* Error Message */}
+            {error && (
+              <div
+                role="alert"
+                className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+              >
+                {error}
+              </div>
+            )}
+
+            {/* Success Message */}
             {message && (
               <div
                 role="status"
@@ -266,11 +390,13 @@ export default function DonorRegistration() {
               </div>
             )}
 
+            {/* Submit Button */}
             <button
               type="submit"
-              className="w-full rounded-xl bg-red-600 px-6 py-4 font-bold text-white shadow-lg shadow-red-100 transition hover:bg-red-700 sm:w-auto"
+              disabled={loading}
+              className="w-full rounded-xl bg-red-600 px-6 py-4 font-bold text-white shadow-lg shadow-red-100 transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
             >
-              Register as Donor →
+              {loading ? "Validating Registration..." : "Register as Donor →"}
             </button>
 
             <p className="text-xs leading-5 text-slate-500">
@@ -281,8 +407,9 @@ export default function DonorRegistration() {
         </div>
       </section>
 
+      {/* Footer */}
       <footer className="border-t border-slate-200 bg-white px-6 py-6 text-center text-sm text-slate-500">
-        © 2026 LifeLink — Smart Blood Donation System
+        © {new Date().getFullYear()} LifeLink — Smart Blood Donation System
       </footer>
     </main>
   );
