@@ -1,14 +1,18 @@
+
 "use client";
 
 import { useState } from "react";
 import Link from "next/link";
+import { apiRequest } from "@/lib/api";
 
 export default function SignupPage() {
   const [form, setForm] = useState({
-    fullName: "",
+    firstName: "",
+    lastName: "",
     email: "",
-    phone: "",
-    role: "Donor",
+    role: "DONOR",
+    city: "",
+    state: "",
     password: "",
     confirmPassword: "",
     agree: false,
@@ -17,6 +21,7 @@ export default function SignupPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   function handleChange(event) {
     const { name, value, type, checked } = event.target;
@@ -30,18 +35,20 @@ export default function SignupPage() {
     setError("");
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
 
     setMessage("");
     setError("");
 
-    const fullName = form.fullName.trim();
-    const email = form.email.trim();
-    const phone = form.phone.trim();
+    const firstName = form.firstName.trim();
+    const lastName = form.lastName.trim();
+    const email = form.email.trim().toLowerCase();
+    const city = form.city.trim();
+    const state = form.state.trim();
 
-    if (fullName.length < 2) {
-      setError("Please enter a valid full name.");
+    if (!firstName || !lastName || !city || !state) {
+      setError("Please fill in all required fields.");
       return;
     }
 
@@ -49,11 +56,6 @@ export default function SignupPage() {
 
     if (!emailRegex.test(email)) {
       setError("Please enter a valid email address.");
-      return;
-    }
-
-    if (!/^\d{10}$/.test(phone)) {
-      setError("Phone number must contain exactly 10 digits.");
       return;
     }
 
@@ -72,9 +74,42 @@ export default function SignupPage() {
       return;
     }
 
-    setMessage(
-      "Signup form validated successfully! Account creation will be connected to the backend later."
-    );
+    try {
+      setLoading(true);
+
+      const response = await apiRequest("/auth/register", {
+        method: "POST",
+        body: JSON.stringify({
+          firstName,
+          lastName,
+          email,
+          password: form.password,
+          role: form.role,
+          city,
+          state,
+        }),
+      });
+
+      setMessage(
+        response.message || "Account created successfully! You can now log in."
+      );
+
+      setForm({
+        firstName: "",
+        lastName: "",
+        email: "",
+        role: "DONOR",
+        city: "",
+        state: "",
+        password: "",
+        confirmPassword: "",
+        agree: false,
+      });
+    } catch (err) {
+      setError(err.message || "Registration failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   const inputClass =
@@ -165,63 +200,98 @@ export default function SignupPage() {
           </div>
 
           <form onSubmit={handleSubmit} className="mt-8 space-y-5">
-            {/* Full Name */}
-            <div>
-              <label htmlFor="fullName" className={labelClass}>
-                Full Name
-              </label>
-
-              <input
-                id="fullName"
-                name="fullName"
-                type="text"
-                value={form.fullName}
-                onChange={handleChange}
-                placeholder="Enter your full name"
-                autoComplete="name"
-                className={inputClass}
-                required
-                minLength={2}
-              />
-            </div>
-
-            {/* Email and Phone */}
+            {/* First Name and Last Name */}
             <div className="grid gap-5 sm:grid-cols-2">
               <div>
-                <label htmlFor="email" className={labelClass}>
-                  Email Address
+                <label htmlFor="firstName" className={labelClass}>
+                  First Name
                 </label>
 
                 <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  value={form.email}
+                  id="firstName"
+                  name="firstName"
+                  type="text"
+                  value={form.firstName}
                   onChange={handleChange}
-                  placeholder="you@example.com"
-                  autoComplete="email"
+                  placeholder="Enter first name"
+                  autoComplete="given-name"
+                  className={inputClass}
+                  required
+                  minLength={2}
+                />
+              </div>
+
+              <div>
+                <label htmlFor="lastName" className={labelClass}>
+                  Last Name
+                </label>
+
+                <input
+                  id="lastName"
+                  name="lastName"
+                  type="text"
+                  value={form.lastName}
+                  onChange={handleChange}
+                  placeholder="Enter last name"
+                  autoComplete="family-name"
+                  className={inputClass}
+                  required
+                />
+              </div>
+            </div>
+
+            {/* Email */}
+            <div>
+              <label htmlFor="email" className={labelClass}>
+                Email Address
+              </label>
+
+              <input
+                id="email"
+                name="email"
+                type="email"
+                value={form.email}
+                onChange={handleChange}
+                placeholder="you@example.com"
+                autoComplete="email"
+                className={inputClass}
+                required
+              />
+            </div>
+
+            {/* City and State */}
+            <div className="grid gap-5 sm:grid-cols-2">
+              <div>
+                <label htmlFor="city" className={labelClass}>
+                  City
+                </label>
+
+                <input
+                  id="city"
+                  name="city"
+                  type="text"
+                  value={form.city}
+                  onChange={handleChange}
+                  placeholder="Enter your city"
+                  autoComplete="address-level2"
                   className={inputClass}
                   required
                 />
               </div>
 
               <div>
-                <label htmlFor="phone" className={labelClass}>
-                  Phone Number
+                <label htmlFor="state" className={labelClass}>
+                  State
                 </label>
 
                 <input
-                  id="phone"
-                  name="phone"
-                  type="tel"
-                  value={form.phone}
+                  id="state"
+                  name="state"
+                  type="text"
+                  value={form.state}
                   onChange={handleChange}
-                  placeholder="10-digit number"
-                  autoComplete="tel"
-                  inputMode="numeric"
-                  maxLength={10}
-                  pattern="[0-9]{10}"
-                  title="Enter a 10-digit phone number"
+                  placeholder="Enter your state"
+                  autoComplete="address-level1"
                   className={inputClass}
                   required
                 />
@@ -242,9 +312,8 @@ export default function SignupPage() {
                 className={inputClass}
                 required
               >
-                <option value="Donor">Blood Donor</option>
-                <option value="Requester">Blood Requester</option>
-                <option value="Both">Both Donor and Requester</option>
+                <option value="DONOR">Blood Donor</option>
+                <option value="PATIENT">Blood Requester</option>
               </select>
             </div>
 
@@ -343,15 +412,24 @@ export default function SignupPage() {
                 className="rounded-xl border border-green-200 bg-green-50 p-4 text-sm leading-6 text-green-800"
               >
                 {message}
+                <div className="mt-2">
+                  <Link
+                    href="/login"
+                    className="font-bold text-red-600 hover:underline"
+                  >
+                    Go to Login →
+                  </Link>
+                </div>
               </div>
             )}
 
             {/* Submit Button */}
             <button
               type="submit"
-              className="w-full rounded-xl bg-red-600 px-5 py-4 font-bold text-white shadow-sm transition hover:bg-red-700 focus:outline-none focus:ring-4 focus:ring-red-200"
+              disabled={loading}
+              className="w-full rounded-xl bg-red-600 px-5 py-4 font-bold text-white shadow-sm transition hover:bg-red-700 focus:outline-none focus:ring-4 focus:ring-red-200 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Create Account →
+              {loading ? "Creating Account..." : "Create Account →"}
             </button>
           </form>
 
@@ -366,8 +444,7 @@ export default function SignupPage() {
           </p>
 
           <p className="mt-6 text-center text-xs leading-5 text-gray-400">
-            Frontend demo only. No account or password is saved or sent to a
-            server.
+            Your account details are securely sent to the LifeLink server.
           </p>
         </div>
       </section>

@@ -1,3 +1,4 @@
+
 import Link from "next/link";
 
 const features = [
@@ -68,12 +69,28 @@ export default function Home() {
             </Link>
           </div>
 
-          <Link
-            href="/donors"
-            className="rounded-full bg-red-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-red-100 transition hover:bg-red-700"
-          >
-            Become a Donor
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/login"
+              className="rounded-full border border-red-600 px-4 py-2.5 text-sm font-bold text-red-600 transition hover:bg-red-50"
+            >
+              Login
+            </Link>
+
+            <Link
+              href="/signup"
+              className="rounded-full bg-red-600 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-red-100 transition hover:bg-red-700"
+            >
+              Sign Up
+            </Link>
+
+            <Link
+              href="/donors"
+              className="rounded-full bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
+            >
+              Become a Donor
+            </Link>
+          </div>
         </div>
       </nav>
 
@@ -314,6 +331,14 @@ export default function Home() {
 
             <Link href="/my-requests" className="transition hover:text-red-600">
               My Requests
+            </Link>
+
+            <Link href="/login" className="transition hover:text-red-600">
+              Login
+            </Link>
+
+            <Link href="/signup" className="transition hover:text-red-600">
+              Sign Up
             </Link>
           </div>
         </div>

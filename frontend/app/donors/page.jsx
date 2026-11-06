@@ -1,32 +1,54 @@
+
 "use client";
 
 import Link from "next/link";
 import { useState } from "react";
+import { apiRequest } from "@/lib/api";
+
+const bloodGroups = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
+
+function getTodayDate() {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function calculateAge(dateOfBirth) {
+  const birthDate = new Date(`${dateOfBirth}T00:00:00`);
+  const today = new Date();
+
+  let age = today.getFullYear() - birthDate.getFullYear();
+
+  const monthDifference = today.getMonth() - birthDate.getMonth();
+
+  if (
+    monthDifference < 0 ||
+    (monthDifference === 0 && today.getDate() < birthDate.getDate())
+  ) {
+    age--;
+  }
+
+  return age;
+}
 
 export default function DonorRegistration() {
   const [formData, setFormData] = useState({
-    fullName: "",
-    email: "",
-    phone: "",
     bloodGroup: "",
-    age: "",
+    dateOfBirth: "",
     city: "",
-    lastDonation: "",
+    state: "",
+    pincode: "",
     available: true,
   });
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-
-  function getTodayDate() {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, "0");
-    const day = String(today.getDate()).padStart(2, "0");
-
-    return `${year}-${month}-${day}`;
-  }
+  const [profileCreated, setProfileCreated] = useState(false);
+  const [donorId, setDonorId] = useState(null);
 
   function handleChange(event) {
     const { name, value, type, checked } = event.target;
@@ -40,52 +62,34 @@ export default function DonorRegistration() {
     setError("");
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
 
     setMessage("");
     setError("");
 
-    const fullName = formData.fullName.trim();
-    const email = formData.email.trim();
-    const phone = formData.phone.trim();
     const city = formData.city.trim();
-    const age = Number(formData.age);
+    const state = formData.state.trim();
+    const pincode = formData.pincode.trim();
 
-    if (fullName.length < 2) {
-      setError("Please enter a valid full name.");
-      return;
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-    if (!emailRegex.test(email)) {
-      setError("Please enter a valid email address.");
-      return;
-    }
-
-    if (!/^\d{10}$/.test(phone)) {
-      setError("Please enter a valid 10-digit phone number.");
-      return;
-    }
-
-    const validBloodGroups = [
-      "A+",
-      "A-",
-      "B+",
-      "B-",
-      "AB+",
-      "AB-",
-      "O+",
-      "O-",
-    ];
-
-    if (!validBloodGroups.includes(formData.bloodGroup)) {
+    if (!bloodGroups.includes(formData.bloodGroup)) {
       setError("Please select a valid blood group.");
       return;
     }
 
-    if (!Number.isInteger(age) || age < 18 || age > 100) {
+    if (!formData.dateOfBirth) {
+      setError("Please enter your date of birth.");
+      return;
+    }
+
+    if (formData.dateOfBirth > getTodayDate()) {
+      setError("Date of birth cannot be in the future.");
+      return;
+    }
+
+    const age = calculateAge(formData.dateOfBirth);
+
+    if (age < 18 || age > 100) {
       setError("Age must be between 18 and 100.");
       return;
     }
@@ -95,20 +99,69 @@ export default function DonorRegistration() {
       return;
     }
 
-    if (formData.lastDonation && formData.lastDonation > getTodayDate()) {
-      setError("Last donation date cannot be in the future.");
+    if (state.length < 2) {
+      setError("Please enter a valid state.");
       return;
     }
 
-    setLoading(true);
+    if (pincode && !/^\d{6}$/.test(pincode)) {
+      setError("Please enter a valid 6-digit pincode.");
+      return;
+    }
 
-    // Frontend demo only. Backend integration will be added later.
-    setTimeout(() => {
-      setLoading(false);
-      setMessage(
-        "Donor registration validated successfully! Database integration will be added later."
+    try {
+      setLoading(true);
+
+      // Step 1: Create donor profile in MySQL and synchronize with Neo4j.
+      const profileResponse = await apiRequest("/donors", {
+        method: "POST",
+        body: JSON.stringify({
+          bloodGroup: formData.bloodGroup,
+          dateOfBirth: formData.dateOfBirth,
+          city,
+          state,
+          pincode: pincode || null,
+        }),
+      });
+
+      setDonorId(profileResponse.donorId);
+      setProfileCreated(true);
+
+      // Step 2: Update donor availability.
+      const availabilityResponse = await apiRequest(
+        "/donors/availability",
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            available: formData.available,
+          }),
+        }
       );
-    }, 700);
+
+      const neo4jSynced =
+        availabilityResponse.neo4jSynced === true;
+
+      if (neo4jSynced) {
+        setMessage(
+          "Donor profile created successfully! MySQL and Neo4j synchronization completed."
+        );
+      } else {
+        setMessage(
+          "Donor profile created successfully in MySQL. Neo4j synchronization needs attention."
+        );
+      }
+    } catch (err) {
+      if (profileCreated) {
+        setError(
+          "Donor profile was created, but availability could not be updated: " +
+            err.message
+        );
+      } else {
+        setError(err.message || "Donor registration failed.");
+      }
+    } finally {
+      setLoading(false);
+    }
   }
 
   const inputClass =
@@ -179,8 +232,9 @@ export default function DonorRegistration() {
             <h3 className="font-bold">Before you register</h3>
 
             <ul className="mt-4 space-y-3 text-sm leading-6 text-slate-300">
-              <li>✓ Provide a reachable contact number.</li>
               <li>✓ Select your correct blood group.</li>
+              <li>✓ Enter your correct date of birth.</li>
+              <li>✓ Provide your current location.</li>
               <li>✓ Keep your availability up to date.</li>
               <li>✓ Confirm donation eligibility with a qualified professional.</li>
             </ul>
@@ -190,78 +244,17 @@ export default function DonorRegistration() {
         {/* Donor Registration Form */}
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8 lg:col-span-2">
           <div className="border-b border-slate-100 pb-5">
-            <h2 className="text-2xl font-extrabold">Your donor details</h2>
+            <h2 className="text-2xl font-extrabold">
+              Your donor details
+            </h2>
 
             <p className="mt-2 text-sm text-slate-500">
-              Fill in the information below.
+              Fill in the information below to create your donor profile.
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-6">
             <div className="grid gap-5 sm:grid-cols-2">
-              {/* Full Name */}
-              <div>
-                <label htmlFor="fullName" className="text-sm font-bold">
-                  Full name *
-                </label>
-
-                <input
-                  id="fullName"
-                  name="fullName"
-                  type="text"
-                  value={formData.fullName}
-                  onChange={handleChange}
-                  className={inputClass}
-                  placeholder="Enter your full name"
-                  autoComplete="name"
-                  minLength={2}
-                  maxLength={100}
-                  required
-                />
-              </div>
-
-              {/* Email */}
-              <div>
-                <label htmlFor="email" className="text-sm font-bold">
-                  Email address *
-                </label>
-
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  className={inputClass}
-                  placeholder="you@example.com"
-                  autoComplete="email"
-                  required
-                />
-              </div>
-
-              {/* Phone */}
-              <div>
-                <label htmlFor="phone" className="text-sm font-bold">
-                  Phone number *
-                </label>
-
-                <input
-                  id="phone"
-                  name="phone"
-                  type="tel"
-                  value={formData.phone}
-                  onChange={handleChange}
-                  className={inputClass}
-                  placeholder="Enter your 10-digit phone number"
-                  autoComplete="tel"
-                  inputMode="numeric"
-                  maxLength={10}
-                  pattern="[0-9]{10}"
-                  title="Enter a 10-digit phone number"
-                  required
-                />
-              </div>
-
               {/* Blood Group */}
               <div>
                 <label htmlFor="bloodGroup" className="text-sm font-bold">
@@ -275,37 +268,34 @@ export default function DonorRegistration() {
                   onChange={handleChange}
                   className={inputClass}
                   required
+                  disabled={profileCreated}
                 >
                   <option value="">Select blood group</option>
 
-                  {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map(
-                    (group) => (
-                      <option key={group} value={group}>
-                        {group}
-                      </option>
-                    )
-                  )}
+                  {bloodGroups.map((group) => (
+                    <option key={group} value={group}>
+                      {group}
+                    </option>
+                  ))}
                 </select>
               </div>
 
-              {/* Age */}
+              {/* Date of Birth */}
               <div>
-                <label htmlFor="age" className="text-sm font-bold">
-                  Age *
+                <label htmlFor="dateOfBirth" className="text-sm font-bold">
+                  Date of birth *
                 </label>
 
                 <input
-                  id="age"
-                  name="age"
-                  type="number"
-                  min="18"
-                  max="100"
-                  step="1"
-                  value={formData.age}
+                  id="dateOfBirth"
+                  name="dateOfBirth"
+                  type="date"
+                  value={formData.dateOfBirth}
                   onChange={handleChange}
+                  max={getTodayDate()}
                   className={inputClass}
-                  placeholder="Enter your age"
                   required
+                  disabled={profileCreated}
                 />
               </div>
 
@@ -327,23 +317,49 @@ export default function DonorRegistration() {
                   minLength={2}
                   maxLength={100}
                   required
+                  disabled={profileCreated}
                 />
               </div>
 
-              {/* Last Donation */}
-              <div className="sm:col-span-2">
-                <label htmlFor="lastDonation" className="text-sm font-bold">
-                  Last blood donation date (optional)
+              {/* State */}
+              <div>
+                <label htmlFor="state" className="text-sm font-bold">
+                  State *
                 </label>
 
                 <input
-                  id="lastDonation"
-                  name="lastDonation"
-                  type="date"
-                  value={formData.lastDonation}
+                  id="state"
+                  name="state"
+                  type="text"
+                  value={formData.state}
                   onChange={handleChange}
-                  max={getTodayDate()}
                   className={inputClass}
+                  placeholder="Enter your state"
+                  autoComplete="address-level1"
+                  minLength={2}
+                  maxLength={100}
+                  required
+                  disabled={profileCreated}
+                />
+              </div>
+
+              {/* Pincode */}
+              <div className="sm:col-span-2">
+                <label htmlFor="pincode" className="text-sm font-bold">
+                  Pincode (optional)
+                </label>
+
+                <input
+                  id="pincode"
+                  name="pincode"
+                  type="text"
+                  value={formData.pincode}
+                  onChange={handleChange}
+                  className={inputClass}
+                  placeholder="Enter your 6-digit pincode"
+                  inputMode="numeric"
+                  maxLength={6}
+                  disabled={profileCreated}
                 />
               </div>
             </div>
@@ -356,6 +372,7 @@ export default function DonorRegistration() {
                 checked={formData.available}
                 onChange={handleChange}
                 className="mt-1 h-4 w-4 accent-red-600"
+                disabled={profileCreated}
               />
 
               <span>
@@ -374,7 +391,7 @@ export default function DonorRegistration() {
             {error && (
               <div
                 role="alert"
-                className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+                className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-700"
               >
                 {error}
               </div>
@@ -384,24 +401,43 @@ export default function DonorRegistration() {
             {message && (
               <div
                 role="status"
-                className="rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-800"
+                className="rounded-xl border border-green-200 bg-green-50 p-4 text-sm leading-6 text-green-800"
               >
                 {message}
+
+                {donorId && (
+                  <p className="mt-2 font-bold">
+                    Your Donor ID: {donorId}
+                  </p>
+                )}
+
+                {profileCreated && (
+                  <Link
+                    href="/dashboard"
+                    className="mt-3 inline-block font-bold text-red-600 hover:underline"
+                  >
+                    Go to Dashboard →
+                  </Link>
+                )}
               </div>
             )}
 
             {/* Submit Button */}
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || profileCreated}
               className="w-full rounded-xl bg-red-600 px-6 py-4 font-bold text-white shadow-lg shadow-red-100 transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
             >
-              {loading ? "Validating Registration..." : "Register as Donor →"}
+              {loading
+                ? "Registering Donor..."
+                : profileCreated
+                  ? "Donor Profile Created"
+                  : "Register as Donor →"}
             </button>
 
             <p className="text-xs leading-5 text-slate-500">
-              This is currently a frontend demonstration. Your information
-              is not saved to a database yet.
+              Your donor profile is saved in MySQL and synchronized with
+              Neo4j. Your logged-in donor account is associated with this profile.
             </p>
           </form>
         </div>

@@ -1,34 +1,53 @@
+
 "use client";
 
 import { useState } from "react";
 import Link from "next/link";
+import { apiRequest } from "@/lib/api";
+
+const hospitals = [
+  {
+    hospitalId: 1,
+    hospitalName: "Manipal Hospital",
+    city: "Bangalore",
+    state: "Karnataka",
+  },
+  {
+    hospitalId: 2,
+    hospitalName: "Apollo Hospital",
+    city: "Bangalore",
+    state: "Karnataka",
+  },
+];
+
+const bloodGroups = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
+
+// Values match the MySQL ENUM:
+// ENUM('LOW', 'MEDIUM', 'HIGH')
+const urgencyOptions = [
+  { label: "Normal", value: "LOW" },
+  { label: "Urgent", value: "MEDIUM" },
+  { label: "Critical", value: "HIGH" },
+];
 
 export default function BloodRequestPage() {
   const [form, setForm] = useState({
     patientName: "",
-    contactName: "",
-    phone: "",
+    hospitalId: "",
     bloodGroup: "",
     units: "1",
-    hospital: "",
-    city: "",
-    urgency: "Urgent",
-    requiredDate: "",
-    details: "",
+    urgency: "HIGH",
+    pincode: "",
   });
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [createdRequestId, setCreatedRequestId] = useState(null);
 
-  function getTodayDate() {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, "0");
-    const day = String(today.getDate()).padStart(2, "0");
-
-    return `${year}-${month}-${day}`;
-  }
+  const selectedHospital = hospitals.find(
+    (hospital) => String(hospital.hospitalId) === form.hospitalId
+  );
 
   function handleChange(event) {
     const { name, value } = event.target;
@@ -40,91 +59,96 @@ export default function BloodRequestPage() {
 
     setMessage("");
     setError("");
+    setCreatedRequestId(null);
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
 
     setMessage("");
     setError("");
+    setCreatedRequestId(null);
 
     const patientName = form.patientName.trim();
-    const contactName = form.contactName.trim();
-    const phone = form.phone.trim();
-    const hospital = form.hospital.trim();
-    const city = form.city.trim();
     const units = Number(form.units);
+    const pincode = form.pincode.trim();
 
     if (patientName.length < 2) {
       setError("Please enter a valid patient name.");
       return;
     }
 
-    if (contactName.length < 2) {
-      setError("Please enter a valid contact person's name.");
+    if (!selectedHospital) {
+      setError("Please select a hospital.");
       return;
     }
 
-    if (!/^\d{10}$/.test(phone)) {
-      setError("Please enter a valid 10-digit phone number.");
-      return;
-    }
-
-    const validBloodGroups = [
-      "A+",
-      "A-",
-      "B+",
-      "B-",
-      "AB+",
-      "AB-",
-      "O+",
-      "O-",
-    ];
-
-    if (!validBloodGroups.includes(form.bloodGroup)) {
+    if (!bloodGroups.includes(form.bloodGroup)) {
       setError("Please select a valid blood group.");
       return;
     }
 
     if (!Number.isInteger(units) || units < 1 || units > 20) {
-      setError("Please enter a number of units between 1 and 20.");
+      setError("Please enter between 1 and 20 units.");
       return;
     }
 
-    if (!["Normal", "Urgent", "Critical"].includes(form.urgency)) {
+    if (pincode && !/^\d{6}$/.test(pincode)) {
+      setError("Please enter a valid 6-digit pincode.");
+      return;
+    }
+
+    if (!["LOW", "MEDIUM", "HIGH"].includes(form.urgency)) {
       setError("Please select a valid urgency level.");
       return;
     }
 
-    if (hospital.length < 2) {
-      setError("Please enter a valid hospital name.");
-      return;
-    }
+    try {
+      setLoading(true);
 
-    if (city.length < 2) {
-      setError("Please enter a valid city.");
-      return;
-    }
+      const response = await apiRequest("/requests", {
+        method: "POST",
+        body: JSON.stringify({
+          hospitalId: selectedHospital.hospitalId,
+          patientName,
+          requiredBloodGroup: form.bloodGroup,
+          unitsRequired: units,
+          urgencyLevel: form.urgency,
+          city: selectedHospital.city,
+          state: selectedHospital.state,
+          pincode: pincode || null,
+        }),
+      });
 
-    if (!form.requiredDate) {
-      setError("Please select the required date.");
-      return;
-    }
+      setCreatedRequestId(response.requestId);
 
-    if (form.requiredDate < getTodayDate()) {
-      setError("Required date cannot be in the past.");
-      return;
-    }
-
-    setLoading(true);
-
-    // Frontend demo only. Backend integration will be added later.
-    setTimeout(() => {
-      setLoading(false);
       setMessage(
-        "Blood request validated successfully! Database integration will be added later."
+        response.message || "Blood request created successfully."
       );
-    }, 700);
+
+      if (response.mysqlSynced && response.neo4jSynced) {
+        setMessage(
+          "Blood request created successfully and synchronized with MySQL and Neo4j."
+        );
+      } else if (response.mysqlSynced) {
+        setMessage(
+          "Blood request saved in MySQL, but Neo4j synchronization needs attention."
+        );
+      }
+
+      setForm({
+        patientName: "",
+        hospitalId: "",
+        bloodGroup: "",
+        units: "1",
+        urgency: "HIGH",
+        pincode: "",
+      });
+    } catch (err) {
+      setError(err.message || "Unable to create blood request.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   const inputClass =
@@ -141,12 +165,21 @@ export default function BloodRequestPage() {
             ❤️ LifeLink
           </Link>
 
-          <Link
-            href="/"
-            className="text-sm font-semibold text-gray-600 transition hover:text-red-600"
-          >
-            ← Back to Home
-          </Link>
+          <div className="flex items-center gap-5">
+            <Link
+              href="/my-requests"
+              className="text-sm font-semibold text-gray-600 transition hover:text-red-600"
+            >
+              My Requests
+            </Link>
+
+            <Link
+              href="/"
+              className="text-sm font-semibold text-gray-600 transition hover:text-red-600"
+            >
+              ← Back to Home
+            </Link>
+          </div>
         </div>
       </nav>
 
@@ -190,17 +223,17 @@ export default function BloodRequestPage() {
           >
             <div className="mb-8">
               <h2 className="text-xl font-bold text-gray-900">
-                Patient & Contact Details
+                Patient & Request Details
               </h2>
 
               <p className="mt-2 text-sm text-gray-500">
-                Enter the patient&apos;s information and a contact number.
+                Enter the patient&apos;s information and blood requirements.
               </p>
             </div>
 
             <div className="grid gap-6 sm:grid-cols-2">
               {/* Patient Name */}
-              <div>
+              <div className="sm:col-span-2">
                 <label htmlFor="patientName" className={labelClass}>
                   Patient Name *
                 </label>
@@ -220,53 +253,10 @@ export default function BloodRequestPage() {
                 />
               </div>
 
-              {/* Contact Person */}
-              <div>
-                <label htmlFor="contactName" className={labelClass}>
-                  Contact Person *
-                </label>
-
-                <input
-                  id="contactName"
-                  className={inputClass}
-                  type="text"
-                  name="contactName"
-                  value={form.contactName}
-                  onChange={handleChange}
-                  placeholder="Enter contact person's name"
-                  minLength={2}
-                  maxLength={100}
-                  required
-                />
-              </div>
-
-              {/* Phone Number */}
-              <div>
-                <label htmlFor="phone" className={labelClass}>
-                  Contact Number *
-                </label>
-
-                <input
-                  id="phone"
-                  className={inputClass}
-                  type="tel"
-                  name="phone"
-                  value={form.phone}
-                  onChange={handleChange}
-                  placeholder="Enter 10-digit phone number"
-                  inputMode="numeric"
-                  maxLength={10}
-                  pattern="[0-9]{10}"
-                  title="Enter a 10-digit phone number"
-                  autoComplete="tel"
-                  required
-                />
-              </div>
-
               {/* Blood Group */}
               <div>
                 <label htmlFor="bloodGroup" className={labelClass}>
-                  Blood Group *
+                  Required Blood Group *
                 </label>
 
                 <select
@@ -279,13 +269,11 @@ export default function BloodRequestPage() {
                 >
                   <option value="">Select blood group</option>
 
-                  {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map(
-                    (group) => (
-                      <option key={group} value={group}>
-                        {group}
-                      </option>
-                    )
-                  )}
+                  {bloodGroups.map((group) => (
+                    <option key={group} value={group}>
+                      {group}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -323,90 +311,90 @@ export default function BloodRequestPage() {
                   onChange={handleChange}
                   required
                 >
-                  <option value="Normal">Normal</option>
-                  <option value="Urgent">Urgent</option>
-                  <option value="Critical">Critical</option>
+                  {urgencyOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
               </div>
 
               {/* Hospital */}
-              <div className="sm:col-span-2">
-                <label htmlFor="hospital" className={labelClass}>
-                  Hospital / Medical Center *
+              <div>
+                <label htmlFor="hospitalId" className={labelClass}>
+                  Hospital *
                 </label>
 
-                <input
-                  id="hospital"
+                <select
+                  id="hospitalId"
                   className={inputClass}
-                  type="text"
-                  name="hospital"
-                  value={form.hospital}
+                  name="hospitalId"
+                  value={form.hospitalId}
                   onChange={handleChange}
-                  placeholder="Enter hospital name and location"
-                  minLength={2}
-                  maxLength={200}
                   required
-                />
+                >
+                  <option value="">Select hospital</option>
+
+                  {hospitals.map((hospital) => (
+                    <option
+                      key={hospital.hospitalId}
+                      value={hospital.hospitalId}
+                    >
+                      {hospital.hospitalName}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {/* City */}
               <div>
                 <label htmlFor="city" className={labelClass}>
-                  City *
+                  City
                 </label>
 
                 <input
                   id="city"
                   className={inputClass}
                   type="text"
-                  name="city"
-                  value={form.city}
-                  onChange={handleChange}
-                  placeholder="Enter city"
-                  minLength={2}
-                  maxLength={100}
-                  required
+                  value={selectedHospital?.city || ""}
+                  placeholder="Select a hospital first"
+                  readOnly
                 />
               </div>
 
-              {/* Required Date */}
+              {/* State */}
               <div>
-                <label htmlFor="requiredDate" className={labelClass}>
-                  Required By *
+                <label htmlFor="state" className={labelClass}>
+                  State
                 </label>
 
                 <input
-                  id="requiredDate"
+                  id="state"
                   className={inputClass}
-                  type="date"
-                  name="requiredDate"
-                  value={form.requiredDate}
-                  onChange={handleChange}
-                  min={getTodayDate()}
-                  required
+                  type="text"
+                  value={selectedHospital?.state || ""}
+                  placeholder="Select a hospital first"
+                  readOnly
                 />
               </div>
 
-              {/* Additional Details */}
-              <div className="sm:col-span-2">
-                <label htmlFor="details" className={labelClass}>
-                  Additional Details (Optional)
+              {/* Pincode */}
+              <div>
+                <label htmlFor="pincode" className={labelClass}>
+                  Pincode (Optional)
                 </label>
 
-                <textarea
-                  id="details"
+                <input
+                  id="pincode"
                   className={inputClass}
-                  name="details"
-                  value={form.details}
+                  type="text"
+                  name="pincode"
+                  value={form.pincode}
                   onChange={handleChange}
-                  rows={4}
-                  maxLength={1000}
-                  placeholder="Add any relevant information..."
+                  placeholder="Enter 6-digit pincode"
+                  inputMode="numeric"
+                  maxLength={6}
                 />
-
-                <p className="mt-1 text-right text-xs text-gray-400">
-                  {form.details.length}/1000 characters
-                </p>
               </div>
             </div>
 
@@ -427,6 +415,21 @@ export default function BloodRequestPage() {
                 className="mt-6 rounded-xl border border-green-200 bg-green-50 p-4 text-sm leading-6 text-green-800"
               >
                 {message}
+
+                {createdRequestId && (
+                  <div className="mt-3">
+                    <p className="font-semibold">
+                      Request ID: {createdRequestId}
+                    </p>
+
+                    <Link
+                      href="/my-requests"
+                      className="mt-2 inline-block font-bold text-red-600 hover:underline"
+                    >
+                      View My Requests →
+                    </Link>
+                  </div>
+                )}
               </div>
             )}
 
@@ -436,12 +439,12 @@ export default function BloodRequestPage() {
               disabled={loading}
               className="mt-8 w-full rounded-xl bg-red-600 px-6 py-4 font-bold text-white shadow-sm transition hover:bg-red-700 focus:outline-none focus:ring-4 focus:ring-red-200 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
             >
-              {loading ? "Validating Request..." : "Submit Blood Request →"}
+              {loading ? "Submitting Request..." : "Submit Blood Request →"}
             </button>
 
             <p className="mt-4 text-xs leading-5 text-gray-500">
-              This demo validates the form in your browser. It does not send
-              data to a server or save a real blood request.
+              Your request will be saved in MySQL and synchronized with Neo4j.
+              Your logged-in account will be associated with this request.
             </p>
           </form>
         </div>

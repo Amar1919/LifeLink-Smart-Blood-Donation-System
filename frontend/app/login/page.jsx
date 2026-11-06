@@ -1,9 +1,14 @@
+
 "use client";
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { apiRequest } from "@/lib/api";
 
 export default function LoginPage() {
+  const router = useRouter();
+
   const [form, setForm] = useState({
     email: "",
     password: "",
@@ -27,7 +32,7 @@ export default function LoginPage() {
     setError("");
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
 
     setMessage("");
@@ -46,27 +51,64 @@ export default function LoginPage() {
       return;
     }
 
-    if (form.password.length < 6) {
-      setError("Password must contain at least 6 characters.");
-      return;
-    }
-
     setLoading(true);
 
-    // Frontend demo only. Real authentication will be connected later.
-    setTimeout(() => {
-      setLoading(false);
-      setMessage(
-        "Login form validated successfully! Backend authentication will be added later."
+    try {
+      const data = await apiRequest("/auth/login", {
+        method: "POST",
+        body: JSON.stringify({
+          email,
+          password: form.password,
+        }),
+      });
+
+      if (!data.token) {
+        throw new Error(
+          "Login response did not contain an authentication token."
+        );
+      }
+
+      const role = String(
+        data.user?.role || data.role || ""
+      ).toUpperCase();
+
+      if (!["PATIENT", "DONOR", "ADMIN"].includes(role)) {
+        throw new Error("Invalid or missing account role.");
+      }
+
+      // Store the newly authenticated account.
+      localStorage.setItem("lifelink_token", data.token);
+
+      const userData = {
+        ...data.user,
+        role,
+      };
+
+      localStorage.setItem(
+        "lifelink_user",
+        JSON.stringify(userData)
       );
-    }, 700);
+
+      setMessage("Login successful! Redirecting...");
+
+      // Redirect according to account role.
+      if (role === "PATIENT") {
+        router.replace("/my-requests");
+      } else if (role === "DONOR") {
+        router.replace("/dashboard");
+      } else if (role === "ADMIN") {
+        router.replace("/dashboard");
+      }
+    } catch (err) {
+      setError(err.message || "Unable to login. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   function handleForgotPassword() {
     setError("");
-    setMessage(
-      "Password recovery will be available once backend authentication is connected."
-    );
+    setMessage("Password recovery is not implemented yet.");
   }
 
   const inputClass =
@@ -74,7 +116,6 @@ export default function LoginPage() {
 
   return (
     <main className="flex min-h-screen bg-white">
-      {/* Left Section */}
       <section className="hidden w-1/2 flex-col justify-between bg-linear-to-br from-red-600 via-red-600 to-rose-500 p-12 text-white lg:flex">
         <Link href="/" className="text-3xl font-extrabold">
           ❤️ LifeLink
@@ -96,7 +137,6 @@ export default function LoginPage() {
 
           <div className="mt-10 flex items-center gap-4 rounded-2xl border border-white/20 bg-white/10 p-5">
             <span className="text-3xl">❤️</span>
-
             <div>
               <p className="font-bold">Together, we save lives.</p>
               <p className="mt-1 text-sm text-red-100">
@@ -111,7 +151,6 @@ export default function LoginPage() {
         </p>
       </section>
 
-      {/* Login Form Section */}
       <section className="flex w-full items-center justify-center px-5 py-12 sm:px-10 lg:w-1/2">
         <div className="w-full max-w-md">
           <Link
@@ -143,7 +182,6 @@ export default function LoginPage() {
           </div>
 
           <form onSubmit={handleSubmit} className="mt-8 space-y-5">
-            {/* Email */}
             <div>
               <label
                 htmlFor="email"
@@ -165,7 +203,6 @@ export default function LoginPage() {
               />
             </div>
 
-            {/* Password */}
             <div>
               <div className="flex items-center justify-between gap-3">
                 <label
@@ -209,7 +246,6 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {/* Remember Me */}
             <div className="flex items-center gap-3">
               <input
                 id="remember"
@@ -225,7 +261,6 @@ export default function LoginPage() {
               </label>
             </div>
 
-            {/* Error Message */}
             {error && (
               <div
                 role="alert"
@@ -235,7 +270,6 @@ export default function LoginPage() {
               </div>
             )}
 
-            {/* Success Message */}
             {message && (
               <div
                 role="status"
@@ -245,13 +279,12 @@ export default function LoginPage() {
               </div>
             )}
 
-            {/* Submit Button */}
             <button
               type="submit"
               disabled={loading}
               className="w-full rounded-xl bg-red-600 px-5 py-4 font-bold text-white shadow-sm transition hover:bg-red-700 focus:outline-none focus:ring-4 focus:ring-red-200 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {loading ? "Validating..." : "Login to Your Account →"}
+              {loading ? "Logging in..." : "Login to Your Account →"}
             </button>
           </form>
 
@@ -266,8 +299,7 @@ export default function LoginPage() {
           </p>
 
           <p className="mt-8 text-center text-xs leading-5 text-gray-400">
-            This is a frontend demo. Login does not authenticate a real user
-            yet.
+            Secure login powered by LifeLink backend authentication.
           </p>
         </div>
       </section>

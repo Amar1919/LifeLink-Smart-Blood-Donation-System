@@ -1,225 +1,351 @@
+
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { apiRequest } from "@/lib/api";
 
-const sampleDonors = [
-  { id: 1, name: "Rahul Sharma", bloodGroup: "O+", city: "Bangalore", available: true },
-  { id: 2, name: "Priya Reddy", bloodGroup: "B+", city: "Bangalore", available: true },
-  { id: 3, name: "Arjun Kumar", bloodGroup: "A+", city: "Mysore", available: true },
-  { id: 4, name: "Sneha Patil", bloodGroup: "O-", city: "Bangalore", available: false },
-  { id: 5, name: "Kiran Rao", bloodGroup: "AB+", city: "Mangalore", available: true },
-  { id: 6, name: "Ananya Das", bloodGroup: "B+", city: "Bangalore", available: true },
-  { id: 7, name: "Vikram Singh", bloodGroup: "A-", city: "Mysore", available: true },
-  { id: 8, name: "Meera Nair", bloodGroup: "O+", city: "Mangalore", available: true },
-];
+function getArray(response) {
+  if (Array.isArray(response?.data)) return response.data;
+  if (Array.isArray(response?.matches)) return response.matches;
+  if (Array.isArray(response?.data?.matches)) {
+    return response.data.matches;
+  }
+  if (Array.isArray(response?.data?.data)) {
+    return response.data.data;
+  }
+  return [];
+}
+
+function normalizeMatch(match, index) {
+  const firstName =
+    match.donor_first_name ||
+    match.first_name ||
+    "";
+
+  const lastName =
+    match.donor_last_name ||
+    match.last_name ||
+    "";
+
+  const name =
+    match.donor_name ||
+    match.name ||
+    `${firstName} ${lastName}`.trim();
+
+  return {
+    id: match.match_id || match.id || index,
+    donorId: match.donor_id || match.donorId || "Not available",
+    name: name || "Donor",
+    bloodGroup:
+      match.donor_blood_group ||
+      match.blood_group ||
+      match.bloodGroup ||
+      "Not specified",
+    city: match.donor_city || match.city || "Not specified",
+    state: match.donor_state || match.state || "",
+    available:
+      match.availability_status === "AVAILABLE" ||
+      match.availability_status === "true" ||
+      match.available === true ||
+      match.available === 1,
+    score: Number(match.match_score || match.score || 0),
+    status: String(
+      match.response_status ||
+      match.match_status ||
+      match.status ||
+      "SUGGESTED"
+    ).toUpperCase(),
+    matchedAt: match.matched_at || match.created_at || null,
+  };
+}
+
+function formatDate(value) {
+  if (!value) return "Not specified";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return "Not specified";
+
+  return date.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
 
 export default function MatchingPage() {
-  const [bloodGroup, setBloodGroup] = useState("");
-  const [city, setCity] = useState("");
-  const [showResults, setShowResults] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [requestId, setRequestId] = useState("");
+  const [matches, setMatches] = useState([]);
+  const [discoveryInfo, setDiscoveryInfo] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
 
-  const filteredDonors = sampleDonors.filter((donor) => {
-    const matchesBlood =
-      !bloodGroup || donor.bloodGroup === bloodGroup;
+  const loadMatches = useCallback(async (id, isRefresh = false) => {
+    try {
+      if (isRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
 
-    const matchesCity =
-      !city.trim() ||
-      donor.city.toLowerCase().includes(city.trim().toLowerCase());
+      setError("");
 
-    return matchesBlood && matchesCity && donor.available;
-  });
+      // Discover actual donors through the backend
+      const discoveryResponse = await apiRequest(
+        `/matches/discover/${id}`,
+        {
+          method: "POST",
+        }
+      );
 
-  function handleSearch(event) {
-    event.preventDefault();
+      setDiscoveryInfo(discoveryResponse);
 
-    setLoading(true);
-    setShowResults(false);
+      // Retrieve the actual matching records for this request
+      const matchesResponse = await apiRequest(
+        `/requests/${id}/matches`
+      );
 
-    // Simulates searching sample data.
-    // Real matching will be handled by the backend later.
-    setTimeout(() => {
+      const matchData = getArray(matchesResponse);
+
+      setMatches(matchData.map(normalizeMatch));
+    } catch (err) {
+      setError(
+        err.message || "Unable to discover matching donors."
+      );
+    } finally {
       setLoading(false);
-      setShowResults(true);
-    }, 600);
-  }
+      setRefreshing(false);
+    }
+  }, []);
 
-  function handleClear() {
-    setBloodGroup("");
-    setCity("");
-    setShowResults(false);
-    setLoading(false);
-  }
+  // Read requestId from the URL and load actual backend matches
+  useEffect(() => {
+    let active = true;
+
+    async function initializeMatching() {
+      const params = new URLSearchParams(window.location.search);
+      const id = params.get("requestId");
+
+      if (!id || !/^\d+$/.test(id) || Number(id) <= 0) {
+        setError(
+          "A valid blood request ID is required. Open this page from My Requests."
+        );
+        setLoading(false);
+        return;
+      }
+
+      if (active) {
+        setRequestId(id);
+      }
+
+      await loadMatches(id);
+    }
+
+    initializeMatching();
+
+    return () => {
+      active = false;
+    };
+  }, [loadMatches]);
+
+  const totalMatches = matches.length;
+
+  const acceptedMatches = matches.filter(
+    (match) => match.status === "ACCEPTED"
+  ).length;
+
+  const pendingMatches = matches.filter(
+    (match) =>
+      match.status === "PENDING" ||
+      match.status === "SUGGESTED" ||
+      match.status === "MATCHED"
+  ).length;
+
+  const rejectedMatches = matches.filter(
+    (match) => match.status === "REJECTED"
+  ).length;
 
   return (
     <main className="min-h-screen bg-gray-50">
       {/* Navigation */}
       <nav className="border-b border-gray-100 bg-white">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5">
-          <Link href="/" className="text-2xl font-extrabold text-red-600">
+          <Link
+            href="/"
+            className="text-2xl font-extrabold text-red-600"
+          >
             ❤️ LifeLink
           </Link>
 
-          <Link
-            href="/"
-            className="text-sm font-semibold text-gray-600 transition hover:text-red-600"
-          >
-            ← Back to Home
-          </Link>
+          <div className="flex flex-wrap items-center gap-4">
+            <Link
+              href="/my-requests"
+              className="text-sm font-semibold text-gray-600 hover:text-red-600"
+            >
+              My Requests
+            </Link>
+
+            <Link
+              href="/"
+              className="text-sm font-semibold text-gray-600 hover:text-red-600"
+            >
+              Home
+            </Link>
+          </div>
         </div>
       </nav>
 
-      {/* Hero Section */}
-      <section className="bg-linear-to-br from-red-600 to-rose-500 px-6 py-16 text-center text-white">
+      {/* Hero */}
+      <section className="bg-linear-to-br from-red-600 to-rose-500 px-6 py-12 text-center text-white">
         <div className="mx-auto max-w-3xl">
           <span className="rounded-full bg-white/20 px-4 py-2 text-sm font-medium">
             Smart Donor Discovery
           </span>
 
-          <h1 className="mt-6 text-4xl font-extrabold sm:text-5xl">
-            Find Blood Donors
+          <h1 className="mt-5 text-4xl font-extrabold sm:text-5xl">
+            Matching Donors
           </h1>
 
-          <p className="mx-auto mt-4 max-w-2xl leading-7 text-red-50">
-            Search potential donors by blood group and city to find a possible
-            match for a blood request.
+          <p className="mt-3 text-red-50">
+            Discover real donor matches for your blood request.
           </p>
+
+          {requestId && (
+            <p className="mt-3 text-sm font-semibold text-white">
+              Blood Request ID: #{requestId}
+            </p>
+          )}
         </div>
       </section>
 
-      {/* Main Content */}
-      <section className="px-4 py-12 sm:px-6">
-        <div className="mx-auto max-w-6xl">
-          {/* Search Form */}
-          <form
-            onSubmit={handleSearch}
-            className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm sm:p-8"
+      <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
+
+        {/* Error */}
+        {error && (
+          <div
+            role="alert"
+            className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
           >
-            <div>
-              <h2 className="text-xl font-bold text-gray-900">
-                Search Donors
-              </h2>
+            {error}
+          </div>
+        )}
 
-              <p className="mt-2 text-sm text-gray-500">
-                Select your requirements to view matching sample profiles.
-              </p>
-            </div>
+        {/* Loading */}
+        {loading && (
+          <div className="rounded-2xl bg-white p-12 text-center shadow-sm">
+            <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-red-100 border-t-red-600" />
 
-            <div className="mt-6 grid gap-5 sm:grid-cols-3">
-              {/* Blood Group */}
-              <div>
-                <label
-                  htmlFor="bloodGroup"
-                  className="text-sm font-semibold text-gray-700"
-                >
-                  Blood Group
-                </label>
+            <h2 className="mt-5 font-bold text-gray-800">
+              Discovering donors...
+            </h2>
 
-                <select
-                  id="bloodGroup"
-                  value={bloodGroup}
-                  onChange={(event) => {
-                    setBloodGroup(event.target.value);
-                    setShowResults(false);
-                  }}
-                  className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-gray-800 outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100"
-                >
-                  <option value="">All blood groups</option>
+            <p className="mt-2 text-sm text-gray-500">
+              Connecting to the LifeLink matching backend.
+            </p>
+          </div>
+        )}
 
-                  {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map(
-                    (group) => (
-                      <option key={group} value={group}>
-                        {group}
-                      </option>
-                    )
-                  )}
-                </select>
+        {!loading && requestId && (
+          <>
+            {/* Statistics */}
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+                <p className="text-sm text-gray-500">
+                  Total Matches
+                </p>
+                <p className="mt-2 text-3xl font-extrabold text-gray-900">
+                  {totalMatches}
+                </p>
               </div>
 
-              {/* City */}
-              <div>
-                <label
-                  htmlFor="city"
-                  className="text-sm font-semibold text-gray-700"
-                >
-                  City
-                </label>
-
-                <input
-                  id="city"
-                  type="text"
-                  value={city}
-                  onChange={(event) => {
-                    setCity(event.target.value);
-                    setShowResults(false);
-                  }}
-                  placeholder="e.g. Bangalore"
-                  className="mt-2 w-full rounded-xl border border-gray-200 px-4 py-3 text-gray-800 outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100"
-                />
+              <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+                <p className="text-sm text-gray-500">
+                  Pending
+                </p>
+                <p className="mt-2 text-3xl font-extrabold text-orange-600">
+                  {pendingMatches}
+                </p>
               </div>
 
-              {/* Search Button */}
-              <div className="flex items-end">
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full rounded-xl bg-red-600 px-6 py-3.5 font-bold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {loading ? "Searching..." : "Search Donors →"}
-                </button>
+              <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+                <p className="text-sm text-gray-500">
+                  Accepted
+                </p>
+                <p className="mt-2 text-3xl font-extrabold text-green-600">
+                  {acceptedMatches}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+                <p className="text-sm text-gray-500">
+                  Rejected
+                </p>
+                <p className="mt-2 text-3xl font-extrabold text-gray-600">
+                  {rejectedMatches}
+                </p>
               </div>
             </div>
-          </form>
 
-          {/* Search Loading */}
-          {loading && (
-            <div className="mt-10 rounded-2xl bg-white p-10 text-center shadow-sm">
-              <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-red-100 border-t-red-600" />
+            {/* Discovery information */}
+            {discoveryInfo && (
+              <div className="mt-6 rounded-2xl border border-green-100 bg-green-50 p-5">
+                <h2 className="font-bold text-green-800">
+                  Donor discovery completed
+                </h2>
 
-              <p className="mt-4 font-semibold text-gray-700">
-                Searching for potential donors...
-              </p>
+                <p className="mt-2 text-sm text-green-700">
+                  {discoveryInfo.message ||
+                    "The backend donor discovery process has completed."}
+                </p>
 
-              <p className="mt-2 text-sm text-gray-500">
-                Please wait while we check the sample profiles.
-              </p>
-            </div>
-          )}
-
-          {/* Search Results */}
-          {showResults && !loading && (
-            <section className="mt-10">
-              <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-900">
-                    Matching Donors
-                  </h2>
-
-                  <p className="mt-1 text-sm text-gray-500">
-                    {filteredDonors.length} available sample profile
-                    {filteredDonors.length === 1 ? "" : "s"} found
+                {discoveryInfo.totalGraphCandidates !== undefined && (
+                  <p className="mt-1 text-sm text-green-700">
+                    Graph candidates: {discoveryInfo.totalGraphCandidates}
                   </p>
-                </div>
+                )}
 
-                <button
-                  type="button"
-                  onClick={handleClear}
-                  className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:border-red-300 hover:text-red-600"
-                >
-                  Clear Filters
-                </button>
+                {discoveryInfo.validCandidates !== undefined && (
+                  <p className="mt-1 text-sm text-green-700">
+                    Valid candidates: {discoveryInfo.validCandidates}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Results heading */}
+            <div className="mt-10 flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-extrabold text-gray-900">
+                  Actual Matching Donors
+                </h2>
+
+                <p className="mt-1 text-sm text-gray-500">
+                  Matching records retrieved from your backend.
+                </p>
               </div>
 
-              {/* Donor Cards */}
-              {filteredDonors.length > 0 ? (
-                <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                  {filteredDonors.map((donor) => (
-                    <article
-                      key={donor.id}
-                      className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-md"
-                    >
-                      <div className="flex items-start justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => loadMatches(requestId, true)}
+                disabled={refreshing}
+                className="rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                {refreshing ? "Refreshing..." : "↻ Refresh Matches"}
+              </button>
+            </div>
+
+            {/* Match cards */}
+            {matches.length > 0 ? (
+              <div className="mt-6 grid gap-5 sm:grid-cols-2">
+                {matches.map((match) => (
+                  <article
+                    key={match.id}
+                    className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
                         <div className="flex items-center gap-3">
                           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-xl">
                             👤
@@ -227,116 +353,95 @@ export default function MatchingPage() {
 
                           <div>
                             <h3 className="font-bold text-gray-900">
-                              {donor.name}
+                              {match.name}
                             </h3>
 
                             <p className="mt-1 text-sm text-gray-500">
-                              📍 {donor.city}
+                              Donor ID: {match.donorId}
                             </p>
                           </div>
                         </div>
+                      </div>
 
-                        <span className="rounded-xl bg-red-50 px-3 py-2 font-extrabold text-red-600">
-                          {donor.bloodGroup}
+                      <span className="rounded-xl bg-red-50 px-3 py-2 font-extrabold text-red-600">
+                        {match.bloodGroup}
+                      </span>
+                    </div>
+
+                    <div className="mt-5 space-y-2 text-sm text-gray-600">
+                      <p>
+                        <strong>Location:</strong> {match.city}
+                        {match.state ? `, ${match.state}` : ""}
+                      </p>
+
+                      <p>
+                        <strong>Match score:</strong> {match.score}
+                      </p>
+
+                      <p>
+                        <strong>Match status:</strong>{" "}
+                        <span
+                          className={`font-bold ${
+                            match.status === "ACCEPTED"
+                              ? "text-green-600"
+                              : match.status === "REJECTED"
+                                ? "text-red-600"
+                                : "text-orange-600"
+                          }`}
+                        >
+                          {match.status}
                         </span>
-                      </div>
+                      </p>
 
-                      <div className="mt-5 flex items-center gap-2 text-sm font-medium text-green-700">
-                        <span className="h-2 w-2 rounded-full bg-green-500" />
+                      <p>
+                        <strong>Matched on:</strong>{" "}
+                        {formatDate(match.matchedAt)}
+                      </p>
+                    </div>
 
-                        {donor.available
-                          ? "Available in sample data"
-                          : "Currently unavailable"}
-                      </div>
+                    <div className="mt-5 border-t border-gray-100 pt-4">
+                      <span className="text-xs font-semibold text-green-700">
+                        <span className="mr-2 inline-block h-2 w-2 rounded-full bg-green-500" />
+                        Backend matching record
+                      </span>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-6 rounded-2xl border border-dashed border-gray-300 bg-white px-6 py-12 text-center">
+                <div className="text-4xl">🔎</div>
 
-                      <div className="mt-5 border-t border-gray-100 pt-4">
-                        <p className="text-xs leading-5 text-gray-400">
-                          Sample profile only. Real donor contact details and
-                          live availability will be provided through the
-                          backend after integration.
-                        </p>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              ) : (
-                /* Empty State */
-                <div className="rounded-2xl border border-dashed border-gray-300 bg-white px-6 py-12 text-center">
-                  <div className="text-4xl">🔎</div>
-
-                  <h3 className="mt-4 text-lg font-bold text-gray-900">
-                    No matching donors found
-                  </h3>
-
-                  <p className="mt-2 text-sm text-gray-500">
-                    Try selecting another blood group or searching in a
-                    different city.
-                  </p>
-
-                  <button
-                    type="button"
-                    onClick={handleClear}
-                    className="mt-5 rounded-xl bg-red-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-red-700"
-                  >
-                    Reset Search
-                  </button>
-                </div>
-              )}
-            </section>
-          )}
-
-          {/* Initial Features */}
-          {!showResults && !loading && (
-            <div className="mt-8 grid gap-4 sm:grid-cols-3">
-              <div className="rounded-2xl bg-white p-5 text-center shadow-sm">
-                <div className="text-3xl">🩸</div>
-
-                <h3 className="mt-3 font-bold text-gray-900">
-                  Blood Group Filter
+                <h3 className="mt-4 text-lg font-bold text-gray-900">
+                  No matching records found
                 </h3>
 
-                <p className="mt-1 text-sm text-gray-500">
-                  Narrow down profiles by blood group.
+                <p className="mt-2 text-sm text-gray-500">
+                  The backend did not return any matching records for this
+                  request.
                 </p>
               </div>
+            )}
+          </>
+        )}
 
-              <div className="rounded-2xl bg-white p-5 text-center shadow-sm">
-                <div className="text-3xl">📍</div>
+        {/* Important note */}
+        <div className="mt-8 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm leading-6 text-amber-900">
+          <strong>Important:</strong> These are software-generated matching
+          suggestions. Actual blood transfusion compatibility and donor
+          eligibility must be confirmed by qualified medical professionals.
+        </div>
 
-                <h3 className="mt-3 font-bold text-gray-900">
-                  Location Search
-                </h3>
-
-                <p className="mt-1 text-sm text-gray-500">
-                  Search available sample donors by city.
-                </p>
-              </div>
-
-              <div className="rounded-2xl bg-white p-5 text-center shadow-sm">
-                <div className="text-3xl">🤝</div>
-
-                <h3 className="mt-3 font-bold text-gray-900">
-                  Potential Matches
-                </h3>
-
-                <p className="mt-1 text-sm text-gray-500">
-                  Review available sample profiles.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* Demo Limitation */}
-          <div className="mt-8 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm leading-6 text-amber-900">
-            <strong>Demo limitation:</strong> These are fictional sample
-            profiles. Blood-group filtering here is a simple exact match, not
-            a complete medical compatibility assessment. Confirm compatibility
-            and availability with qualified medical staff.
-          </div>
+        <div className="mt-8 text-center">
+          <Link
+            href="/my-requests"
+            className="inline-block rounded-xl bg-red-600 px-6 py-3 font-bold text-white transition hover:bg-red-700"
+          >
+            ← Back to My Requests
+          </Link>
         </div>
       </section>
 
-      {/* Footer */}
       <footer className="border-t border-gray-100 bg-white px-6 py-6 text-center text-sm text-gray-500">
         © {new Date().getFullYear()} LifeLink. Connecting donors, saving lives.
       </footer>

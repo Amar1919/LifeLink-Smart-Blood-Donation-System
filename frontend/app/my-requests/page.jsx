@@ -1,60 +1,97 @@
+
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-
-const initialRequests = [
-  {
-    id: "LL-1001",
-    patient: "Rahul Sharma",
-    bloodGroup: "O+",
-    units: 2,
-    hospital: "City General Hospital",
-    city: "Bengaluru",
-    urgency: "Urgent",
-    date: "2026-10-25",
-    status: "Searching",
-  },
-  {
-    id: "LL-1002",
-    patient: "Priya Kumar",
-    bloodGroup: "B+",
-    units: 1,
-    hospital: "Apollo Hospital",
-    city: "Mysuru",
-    urgency: "Normal",
-    date: "2026-10-28",
-    status: "Fulfilled",
-  },
-  {
-    id: "LL-1003",
-    patient: "Anil Patil",
-    bloodGroup: "AB+",
-    units: 3,
-    hospital: "District Hospital",
-    city: "Hubballi",
-    urgency: "Critical",
-    date: "2026-10-22",
-    status: "Searching",
-  },
-];
+import { apiRequest } from "@/lib/api";
 
 const statusStyles = {
-  Searching: "bg-blue-50 text-blue-700",
-  Fulfilled: "bg-green-50 text-green-700",
-  Cancelled: "bg-gray-100 text-gray-600",
+  PENDING: "bg-blue-50 text-blue-700",
+  MATCHED: "bg-blue-50 text-blue-700",
+  ACCEPTED: "bg-purple-50 text-purple-700",
+  FULFILLED: "bg-green-50 text-green-700",
+  CANCELLED: "bg-gray-100 text-gray-600",
 };
 
 const urgencyStyles = {
-  Critical: "bg-red-100 text-red-700",
-  Urgent: "bg-orange-100 text-orange-700",
-  Normal: "bg-green-100 text-green-700",
+  CRITICAL: "bg-red-100 text-red-700",
+  HIGH: "bg-orange-100 text-orange-700",
+  MEDIUM: "bg-yellow-100 text-yellow-700",
+  LOW: "bg-green-100 text-green-700",
+  NORMAL: "bg-green-100 text-green-700",
 };
+
+function getValue(object, keys, fallback = "") {
+  for (const key of keys) {
+    if (object[key] !== undefined && object[key] !== null) {
+      return object[key];
+    }
+  }
+  return fallback;
+}
+
+function normalizeRequest(request) {
+  const acceptedResponses = Number(
+    getValue(request, ["accepted_responses", "acceptedResponses"], 0)
+  );
+
+  const pendingResponses = Number(
+    getValue(request, ["pending_responses", "pendingResponses"], 0)
+  );
+
+  const totalMatches = Number(
+    getValue(request, ["total_matches", "totalMatches"], 0)
+  );
+
+  const rawStatus = String(
+    getValue(request, ["status"], "PENDING")
+  ).toUpperCase();
+
+  const displayStatus =
+    ["PENDING", "MATCHED"].includes(rawStatus) && acceptedResponses > 0
+      ? "ACCEPTED"
+      : rawStatus;
+
+  return {
+    id: getValue(request, ["request_id", "requestId", "id"]),
+    patient: getValue(request, ["patient_name", "patientName"], "Patient"),
+    bloodGroup: getValue(
+      request,
+      ["required_blood_group", "blood_group", "bloodGroup"],
+      "Not specified"
+    ),
+    units: Number(
+      getValue(request, ["units_required", "unitsRequired", "units"], 0)
+    ),
+    hospital: getValue(
+      request,
+      ["hospital_name", "hospitalName"],
+      "Hospital not specified"
+    ),
+    city: getValue(request, ["city"], "Not specified"),
+    urgency: String(
+      getValue(request, ["urgency", "priority", "urgency_level"], "NORMAL")
+    ).toUpperCase(),
+    date: getValue(
+      request,
+      ["required_by", "requiredBy", "request_date", "created_at"],
+      null
+    ),
+    status: displayStatus,
+    databaseStatus: rawStatus,
+    totalMatches,
+    acceptedResponses,
+    pendingResponses,
+    rejectedResponses: Number(
+      getValue(request, ["rejected_responses", "rejectedResponses"], 0)
+    ),
+  };
+}
 
 function formatDate(dateString) {
   if (!dateString) return "Not specified";
 
-  const date = new Date(`${dateString}T00:00:00`);
+  const date = new Date(dateString);
 
   if (Number.isNaN(date.getTime())) return dateString;
 
@@ -65,32 +102,124 @@ function formatDate(dateString) {
   });
 }
 
+function getStatusLabel(status) {
+  const labels = {
+    PENDING: "Searching",
+    MATCHED: "Searching",
+    ACCEPTED: "Donor Accepted",
+    FULFILLED: "Fulfilled",
+    CANCELLED: "Cancelled",
+  };
+
+  return labels[status] || status;
+}
+
 export default function MyRequestsPage() {
-  const [requests, setRequests] = useState(initialRequests);
+  const [requests, setRequests] = useState([]);
   const [filter, setFilter] = useState("All");
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState("success");
+  const [loading, setLoading] = useState(true);
+  const [cancellingId, setCancellingId] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Initial loading: state updates happen after the API request resolves.
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadInitialRequests() {
+      try {
+        const response = await apiRequest("/requests/my-requests");
+
+        const requestData = Array.isArray(response.data)
+          ? response.data
+          : Array.isArray(response.requests)
+            ? response.requests
+            : [];
+
+        if (isMounted) {
+          setRequests(requestData.map(normalizeRequest));
+          setMessage("");
+        }
+      } catch (error) {
+        if (isMounted) {
+          setMessage(error.message || "Unable to load your requests.");
+          setMessageType("error");
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadInitialRequests();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Used by the Refresh button and after cancellation.
+  const fetchRequests = useCallback(async () => {
+    try {
+      const response = await apiRequest("/requests/my-requests");
+
+      const requestData = Array.isArray(response.data)
+        ? response.data
+        : Array.isArray(response.requests)
+          ? response.requests
+          : [];
+
+      setRequests(requestData.map(normalizeRequest));
+      setMessage("");
+    } catch (error) {
+      setMessage(error.message || "Unable to load your requests.");
+      setMessageType("error");
+    }
+  }, []);
 
   const filteredRequests = requests.filter((request) => {
-    const matchesFilter =
-      filter === "All" || request.status === filter;
+    let matchesFilter = true;
+
+    if (filter === "Searching") {
+      matchesFilter = ["PENDING", "MATCHED"].includes(request.status);
+    } else if (filter === "Donor Accepted") {
+      matchesFilter = request.status === "ACCEPTED";
+    } else if (filter === "Fulfilled") {
+      matchesFilter = request.status === "FULFILLED";
+    } else if (filter === "Cancelled") {
+      matchesFilter = request.status === "CANCELLED";
+    }
 
     const searchText = search.trim().toLowerCase();
 
-    const matchesSearch =
-      request.id.toLowerCase().includes(searchText) ||
-      request.patient.toLowerCase().includes(searchText) ||
-      request.bloodGroup.toLowerCase().includes(searchText) ||
-      request.city.toLowerCase().includes(searchText) ||
-      request.hospital.toLowerCase().includes(searchText) ||
-      request.urgency.toLowerCase().includes(searchText);
+    const matchesSearch = [
+      String(request.id),
+      request.patient,
+      request.bloodGroup,
+      request.city,
+      request.hospital,
+      request.urgency,
+      getStatusLabel(request.status),
+    ].some((value) =>
+      String(value).toLowerCase().includes(searchText)
+    );
 
     return matchesFilter && matchesSearch;
   });
 
-  function cancelRequest(id) {
-    const request = requests.find((item) => item.id === id);
+  async function handleRefresh() {
+    setRefreshing(true);
+    await fetchRequests();
+    setRefreshing(false);
+  }
+
+  async function cancelRequest(id) {
+    const request = requests.find(
+      (item) => String(item.id) === String(id)
+    );
 
     if (!request) {
       setMessageType("error");
@@ -98,9 +227,9 @@ export default function MyRequestsPage() {
       return;
     }
 
-    if (request.status !== "Searching") {
+    if (!["PENDING", "MATCHED"].includes(request.status)) {
       setMessageType("error");
-      setMessage("Only requests with Searching status can be cancelled.");
+      setMessage("This request cannot be cancelled.");
       return;
     }
 
@@ -110,30 +239,45 @@ export default function MyRequestsPage() {
 
     if (!confirmed) return;
 
-    setRequests((previous) =>
-      previous.map((item) =>
-        item.id === id
-          ? { ...item, status: "Cancelled" }
-          : item
-      )
-    );
+    try {
+      setCancellingId(id);
+      setMessage("");
 
-    setMessageType("success");
-    setMessage(`Request ${id} has been cancelled successfully.`);
+      const response = await apiRequest(`/requests/${id}/cancel`, {
+        method: "PATCH",
+      });
+
+      setMessage(
+        response.message ||
+          `Request ${id} has been cancelled successfully.`
+      );
+      setMessageType("success");
+
+      await fetchRequests();
+    } catch (error) {
+      setMessage(error.message || "Unable to cancel this request.");
+      setMessageType("error");
+    } finally {
+      setCancellingId(null);
+    }
   }
 
   const totalRequests = requests.length;
 
-  const searchingCount = requests.filter(
-    (request) => request.status === "Searching"
+  const searchingCount = requests.filter((request) =>
+    ["PENDING", "MATCHED"].includes(request.status)
+  ).length;
+
+  const acceptedCount = requests.filter(
+    (request) => request.status === "ACCEPTED"
   ).length;
 
   const fulfilledCount = requests.filter(
-    (request) => request.status === "Fulfilled"
+    (request) => request.status === "FULFILLED"
   ).length;
 
   const cancelledCount = requests.filter(
-    (request) => request.status === "Cancelled"
+    (request) => request.status === "CANCELLED"
   ).length;
 
   const statistics = [
@@ -146,6 +290,11 @@ export default function MyRequestsPage() {
       label: "Searching",
       value: searchingCount,
       color: "text-blue-600",
+    },
+    {
+      label: "Donor Accepted",
+      value: acceptedCount,
+      color: "text-purple-600",
     },
     {
       label: "Fulfilled",
@@ -212,22 +361,32 @@ export default function MyRequestsPage() {
             </p>
           </div>
 
-          <Link
-            href="/requests"
-            className="rounded-xl bg-red-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-red-700"
-          >
-            + Create Request
-          </Link>
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
+            >
+              {refreshing ? "Refreshing..." : "↻ Refresh"}
+            </button>
+
+            <Link
+              href="/requests"
+              className="rounded-xl bg-red-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-red-700"
+            >
+              + Create Request
+            </Link>
+          </div>
         </div>
 
-        <div className="mt-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
           {statistics.map((stat) => (
             <div
               key={stat.label}
               className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm"
             >
               <p className="text-sm text-gray-500">{stat.label}</p>
-
               <p className={`mt-2 text-3xl font-extrabold ${stat.color}`}>
                 {stat.value}
               </p>
@@ -239,9 +398,8 @@ export default function MyRequestsPage() {
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <h2 className="font-bold">All Requests</h2>
-
               <p className="mt-1 text-sm text-gray-500">
-                Search by patient, request ID, hospital, blood group, or city.
+                Search by request ID, hospital, blood group, or city.
               </p>
             </div>
 
@@ -256,7 +414,13 @@ export default function MyRequestsPage() {
           </div>
 
           <div className="mt-5 flex flex-wrap gap-2">
-            {["All", "Searching", "Fulfilled", "Cancelled"].map((status) => (
+            {[
+              "All",
+              "Searching",
+              "Donor Accepted",
+              "Fulfilled",
+              "Cancelled",
+            ].map((status) => (
               <button
                 key={status}
                 type="button"
@@ -301,7 +465,16 @@ export default function MyRequestsPage() {
         )}
 
         <section className="mt-6 space-y-5">
-          {filteredRequests.length > 0 ? (
+          {loading ? (
+            <div className="rounded-2xl border border-gray-100 bg-white px-5 py-16 text-center shadow-sm">
+              <p className="font-semibold text-gray-700">
+                Loading your blood requests...
+              </p>
+              <p className="mt-2 text-sm text-gray-500">
+                Fetching your latest information from LifeLink.
+              </p>
+            </div>
+          ) : filteredRequests.length > 0 ? (
             filteredRequests.map((request) => (
               <article
                 key={request.id}
@@ -317,11 +490,9 @@ export default function MyRequestsPage() {
                       <h3 className="text-lg font-bold">
                         {request.patient}
                       </h3>
-
                       <p className="mt-1 text-sm text-gray-500">
                         Request ID: {request.id}
                       </p>
-
                       <p className="mt-1 text-sm text-gray-600">
                         {request.hospital}
                       </p>
@@ -330,15 +501,21 @@ export default function MyRequestsPage() {
 
                   <div className="flex flex-wrap gap-2">
                     <span
-                      className={`rounded-full px-3 py-1.5 text-xs font-bold ${urgencyStyles[request.urgency]}`}
+                      className={`rounded-full px-3 py-1.5 text-xs font-bold ${
+                        urgencyStyles[request.urgency] ||
+                        urgencyStyles.NORMAL
+                      }`}
                     >
                       {request.urgency}
                     </span>
 
                     <span
-                      className={`rounded-full px-3 py-1.5 text-xs font-bold ${statusStyles[request.status]}`}
+                      className={`rounded-full px-3 py-1.5 text-xs font-bold ${
+                        statusStyles[request.status] ||
+                        "bg-gray-100 text-gray-600"
+                      }`}
                     >
-                      {request.status}
+                      {getStatusLabel(request.status)}
                     </span>
                   </div>
                 </div>
@@ -357,7 +534,7 @@ export default function MyRequestsPage() {
                   </div>
 
                   <div>
-                    <p className="text-xs text-gray-500">Required By</p>
+                    <p className="text-xs text-gray-500">Request Date</p>
                     <p className="mt-1 font-semibold">
                       {formatDate(request.date)}
                     </p>
@@ -365,14 +542,41 @@ export default function MyRequestsPage() {
 
                   <div>
                     <p className="text-xs text-gray-500">Current Status</p>
-                    <p className="mt-1 font-semibold">{request.status}</p>
+                    <p className="mt-1 font-semibold">
+                      {getStatusLabel(request.status)}
+                    </p>
                   </div>
                 </div>
 
-                {request.status === "Searching" && (
+                {request.totalMatches > 0 && (
+                  <div className="mt-5 grid grid-cols-2 gap-3 rounded-xl bg-gray-50 p-4 sm:grid-cols-3">
+                    <div>
+                      <p className="text-xs text-gray-500">Total Matches</p>
+                      <p className="mt-1 text-lg font-bold">
+                        {request.totalMatches}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs text-gray-500">Donors Accepted</p>
+                      <p className="mt-1 text-lg font-bold text-purple-700">
+                        {request.acceptedResponses}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs text-gray-500">Pending Responses</p>
+                      <p className="mt-1 text-lg font-bold text-blue-700">
+                        {request.pendingResponses}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {["PENDING", "MATCHED"].includes(request.status) && (
                   <div className="mt-5 flex flex-wrap gap-3">
                     <Link
-                      href="/matching"
+                      href={`/matching?requestId=${request.id}`}
                       className="rounded-xl bg-red-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-red-700"
                     >
                       Find Matching Donors
@@ -381,20 +585,40 @@ export default function MyRequestsPage() {
                     <button
                       type="button"
                       onClick={() => cancelRequest(request.id)}
-                      className="rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-semibold text-gray-600 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                      disabled={cancellingId === request.id}
+                      className="rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-semibold text-gray-600 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      Cancel Request
+                      {cancellingId === request.id
+                        ? "Cancelling..."
+                        : "Cancel Request"}
                     </button>
                   </div>
                 )}
 
-                {request.status === "Fulfilled" && (
+                {request.status === "ACCEPTED" && (
+                  <div className="mt-5 rounded-xl bg-purple-50 px-4 py-3 text-sm font-medium text-purple-700">
+                    <p>
+                      {request.acceptedResponses} donor
+                      {request.acceptedResponses === 1 ? "" : "s"} accepted
+                      this request.
+                    </p>
+
+                    <Link
+                      href={`/matching?requestId=${request.id}`}
+                      className="mt-2 inline-block font-bold underline"
+                    >
+                      View Matching Donors
+                    </Link>
+                  </div>
+                )}
+
+                {request.status === "FULFILLED" && (
                   <p className="mt-5 rounded-xl bg-green-50 px-4 py-3 text-sm font-medium text-green-700">
                     This request has been fulfilled.
                   </p>
                 )}
 
-                {request.status === "Cancelled" && (
+                {request.status === "CANCELLED" && (
                   <p className="mt-5 rounded-xl bg-gray-50 px-4 py-3 text-sm font-medium text-gray-600">
                     This request has been cancelled.
                   </p>
@@ -406,7 +630,9 @@ export default function MyRequestsPage() {
               <h3 className="text-lg font-bold">No requests found</h3>
 
               <p className="mt-2 text-sm text-gray-500">
-                Try another search term or filter, or create a new request.
+                {requests.length === 0
+                  ? "You haven't created any blood requests yet."
+                  : "Try another search term or filter."}
               </p>
 
               <button
@@ -433,9 +659,8 @@ export default function MyRequestsPage() {
         </section>
 
         <p className="mt-8 text-center text-xs leading-5 text-gray-400">
-          Demonstration data only. Request changes are temporary and reset
-          when this page is refreshed. This page is not connected to the
-          backend or database yet.
+          Your blood request information is retrieved from the LifeLink
+          backend.
         </p>
       </section>
 
